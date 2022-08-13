@@ -8,6 +8,7 @@ from . import oot_operators
 from . import oot_skeleton
 from . import oot_spline
 from . import oot_utility
+from . import oot_actor_collider
 
 from ..panels import OOT_Panel
 from ..utility import prop_split
@@ -54,6 +55,7 @@ def oot_panel_register():
     oot_anim.oot_anim_panel_register()
     oot_skeleton.oot_skeleton_panel_register()
     oot_cutscene.oot_cutscene_panel_register()
+    oot_actor_collider.oot_actor_collider_panel_register()
 
 
 def oot_panel_unregister():
@@ -66,6 +68,7 @@ def oot_panel_unregister():
     oot_anim.oot_anim_panel_unregister()
     oot_skeleton.oot_skeleton_panel_unregister()
     oot_cutscene.oot_cutscene_panel_unregister()
+    oot_actor_collider.oot_actor_collider_panel_unregister()
 
 
 def oot_register(registerPanels):
@@ -82,6 +85,7 @@ def oot_register(registerPanels):
     oot_anim.oot_anim_register()
     oot_skeleton.oot_skeleton_register()
     oot_cutscene.oot_cutscene_register()
+    oot_actor_collider.oot_actor_collider_register()
 
     if registerPanels:
         oot_panel_register()
@@ -107,6 +111,7 @@ def oot_unregister(unregisterPanels):
     oot_anim.oot_anim_unregister()
     oot_skeleton.oot_skeleton_unregister()
     oot_cutscene.oot_cutscene_unregister()
+    oot_actor_collider.oot_actor_collider_unregister()
 
     if unregisterPanels:
         oot_panel_unregister()
