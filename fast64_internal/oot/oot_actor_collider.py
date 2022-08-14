@@ -55,7 +55,7 @@ def updateCollider(self, context: bpy.types.Context) -> None:
     updateColliderOnObj(context.object)
 
 
-def updateColliderOnObj(obj: bpy.types.Object) -> None:
+def updateColliderOnObj(obj: bpy.types.Object, updateJointSiblings: bool = True) -> None:
     if obj.ootGeometryType == "Actor Collider":
         colliderProp = obj.ootActorCollider
         if colliderProp.colliderShape == "COLSHAPE_JNTSPH":
@@ -76,6 +76,10 @@ def updateColliderOnObj(obj: bpy.types.Object) -> None:
         else:
             material = getColliderMat("oot_collider_white", (1, 1, 1, 0.5))
         applyColliderGeoNodes(obj, material, colliderProp.colliderShape)
+
+        if updateJointSiblings and colliderProp.colliderShape == "COLSHAPE_JNTSPH" and obj.parent is not None:
+            for child in obj.parent.children:
+                updateColliderOnObj(child, False)
 
 
 # Defaults are from DMG_DEFAULT.
