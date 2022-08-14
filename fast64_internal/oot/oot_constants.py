@@ -1563,6 +1563,7 @@ ootEnumColliderShape = [
     ("COLSHAPE_JNTSPH", "Joint Sphere", "Joint Sphere"),
     ("COLSHAPE_CYLINDER", "Cylinder", "Cylinder"),
     ("COLSHAPE_TRIS", "Triangles", "Triangles"),
+    ("COLSHAPE_QUAD", "Quad (Properties Only)", "Quad"),
 ]
 
 ootEnumColliderType = [

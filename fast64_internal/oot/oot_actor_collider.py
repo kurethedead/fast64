@@ -25,8 +25,10 @@ def updateColliderOnObj(obj: bpy.types.Object, updateJointSiblings: bool = True)
         else:
             queryProp = colliderProp
 
-        if colliderProp.colliderShape == "COLSHAPE_TRIS":
-            material = getColliderMat("oot_collider_cyan", (0, 0.5, 1, 0.3))
+        # if colliderProp.colliderShape == "COLSHAPE_TRIS":
+        #    material = getColliderMat("oot_collider_cyan", (0, 0.5, 1, 0.3))
+        if colliderProp.colliderShape == "COLSHAPE_QUAD":
+            material = getColliderMat("oot_collider_orange", (0.8, 0.1, 0, 0.5))
         elif queryProp.hitbox.enable and (queryProp.hurtbox.enable or queryProp.physics.enable):
             material = getColliderMat("oot_collider_magenta", (1, 0, 1, 0.5))
         elif queryProp.hitbox.enable:
@@ -320,6 +322,9 @@ class OOTActorColliderProperty(bpy.types.PropertyGroup):
             else:
                 layout.label(text="Joint sphere colliders must be parented to a bone in an armature.", icon="ERROR")
         else:
+            if obj.ootActorCollider.colliderShape == "COLSHAPE_QUAD":
+                layout.label(text="Geometry is ignored and zeroed.", icon="INFO")
+                layout.label(text="Only properties are exported.")
             prop_split(layout, self, "colliderType", "Collider Type")
             self.hitbox.draw(layout)
             self.hurtbox.draw(layout)
@@ -492,6 +497,11 @@ class OOT_CopyColliderProperties(bpy.types.Operator):
 def addColliderThenParent(shapeName: str, obj: bpy.types.Object, bone: bpy.types.Bone | None) -> bpy.types.Object:
     colliderObj = addCollider(shapeName)
     if bone is not None:
+
+        # If no active bone is set, then parenting operator fails.
+        obj.data.bones.active = obj.data.bones[0]
+        obj.data.bones[0].select = True
+
         parentObject(obj, colliderObj, "BONE")
         colliderObj.parent_bone = bone.name
         colliderObj.matrix_world = obj.matrix_world @ obj.pose.bones[bone.name].matrix
@@ -518,7 +528,7 @@ def addCollider(shapeName: str) -> bpy.types.Object:
     if shapeName == "COLSHAPE_CYLINDER":
         planeObj.lock_location = (True, True, False)
         planeObj.lock_rotation = (True, True, True)
-    elif shapeName == "COLSHAPE_TRIS":
+    elif shapeName == "COLSHAPE_TRIS" or shapeName == "COLSHAPE_QUAD":
         planeObj.lock_location = (True, True, True)
         planeObj.lock_rotation = (True, True, True)
 
@@ -585,6 +595,7 @@ def shapeNameToBlenderName(shapeName: str) -> str:
             "COLSHAPE_JNTSPH": "oot_collider_sphere",
             "COLSHAPE_CYLINDER": "oot_collider_cylinder",
             "COLSHAPE_TRIS": "oot_collider_triangles",
+            "COLSHAPE_QUAD": "oot_collider_quad",
         },
     )
 
@@ -596,6 +607,7 @@ def shapeNameToSimpleName(shapeName: str) -> str:
             "COLSHAPE_JNTSPH": "Sphere",
             "COLSHAPE_CYLINDER": "Cylinder",
             "COLSHAPE_TRIS": "Mesh",
+            "COLSHAPE_QUAD": "Quad",
         },
     )
 
@@ -616,6 +628,7 @@ def drawColliderVisibilityOperators(layout: bpy.types.UILayout):
     row.prop(visibilitySettings, "jointSphere", text="Joint Sphere", toggle=1)
     row.prop(visibilitySettings, "cylinder", text="Cylinder", toggle=1)
     row.prop(visibilitySettings, "mesh", text="Mesh", toggle=1)
+    row.prop(visibilitySettings, "quad", text="Quad", toggle=1)
 
 
 @persistent
@@ -680,6 +693,10 @@ def updateVisibilityMesh(self, context):
     updateVisibilityCollider("COLSHAPE_TRIS", self.mesh)
 
 
+def updateVisibilityQuad(self, context):
+    updateVisibilityCollider("COLSHAPE_QUAD", self.quad)
+
+
 def updateVisibilityCollider(shapeName: str, visibility: bool) -> None:
     selectedObjs = bpy.context.selected_objects
     for obj in bpy.data.objects:
@@ -696,6 +713,7 @@ class OOTColliderVisibilitySettings(bpy.types.PropertyGroup):
     jointSphere: bpy.props.BoolProperty(name="Joint Sphere", default=True, update=updateVisibilityJointSphere)
     cylinder: bpy.props.BoolProperty(name="Cylinder", default=True, update=updateVisibilityCylinder)
     mesh: bpy.props.BoolProperty(name="Mesh", default=True, update=updateVisibilityMesh)
+    quad: bpy.props.BoolProperty(name="Quad", default=True, update=updateVisibilityQuad)
 
 
 oot_actor_collider_classes = (
