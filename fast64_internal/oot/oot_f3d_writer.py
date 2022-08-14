@@ -13,6 +13,11 @@ from .oot_model_classes import *
 from .oot_scene_room import *
 from .oot_texture_array import *
 
+ootEnumGeometryType = [
+    ("Regular", "Regular", "Regular"),
+    ("Actor Collider", "Actor Collider", "Actor Collider"),
+]
+
 # returns:
 # 	mesh,
 # 	anySkinnedFaces (to determine if skeleton should be flex)
@@ -598,7 +603,11 @@ class OOT_MaterialPanel(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.material is not None and context.scene.gameEditorMode == "OOT"
+        return (
+            context.material is not None
+            and context.scene.gameEditorMode == "OOT"
+            and not (context.object is not None and context.object.ootGeometryType == "Actor Collider")
+        )
 
     def draw(self, context):
         layout = self.layout
@@ -736,6 +745,7 @@ def oot_dl_writer_register():
 
     bpy.types.Material.ootMaterial = bpy.props.PointerProperty(type=OOTDynamicMaterialProperty)
     bpy.types.Object.ootObjectMenu = bpy.props.EnumProperty(items=ootEnumObjectMenu)
+    bpy.types.Object.ootGeometryType = bpy.props.EnumProperty(items=ootEnumGeometryType, name="Geometry Type")
 
 
 def oot_dl_writer_unregister():
@@ -767,3 +777,4 @@ def oot_dl_writer_unregister():
 
     del bpy.types.Material.ootMaterial
     del bpy.types.Object.ootObjectMenu
+    del bpy.types.Object.ootGeometryType

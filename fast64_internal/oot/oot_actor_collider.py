@@ -9,11 +9,6 @@ from ..f3d.f3d_material import createF3DMat, update_preset_manual
 logging.basicConfig(format="%(asctime)s: %(message)s", datefmt="%m/%d/%Y %I:%M:%S %p")
 logger = logging.getLogger(__name__)
 
-ootEnumGeometryType = [
-    ("Regular", "Regular", "Regular"),
-    ("Actor Collider", "Actor Collider", "Actor Collider"),
-]
-
 ootEnumColliderShape = [
     ("COLSHAPE_JNTSPH", "Joint Sphere", "Joint Sphere"),
     ("COLSHAPE_CYLINDER", "Cylinder", "Cylinder"),
@@ -69,7 +64,10 @@ def updateColliderOnObj(obj: bpy.types.Object) -> None:
             queryProp = obj.parent.ootActorCollider
         else:
             queryProp = colliderProp
-        if queryProp.hitbox.enable and (queryProp.hurtbox.enable or queryProp.physics.enable):
+
+        if colliderProp.colliderShape == "COLSHAPE_TRIS":
+            material = getColliderMat("oot_collider_cyan", (0, 0.5, 1, 0.3))
+        elif queryProp.hitbox.enable and (queryProp.hurtbox.enable or queryProp.physics.enable):
             material = getColliderMat("oot_collider_magenta", (1, 0, 1, 0.5))
         elif queryProp.hitbox.enable:
             material = getColliderMat("oot_collider_red", (1, 0, 0, 0.5))
@@ -364,17 +362,25 @@ class OOTActorColliderItemProperty(bpy.types.PropertyGroup):
     bump: bpy.props.PointerProperty(type=OOTColliderHurtboxItemProperty, name="Bump")
     objectElem: bpy.props.PointerProperty(type=OOTColliderPhysicsItemProperty, name="Object Element")
 
-    def draw(self, obj: bpy.types.Object, layout: bpy.types.UILayout):
-        if obj.ootActorCollider.colliderShape == "COLSHAPE_JNTSPH":
+    def draw(self, obj: bpy.types.Object | None, layout: bpy.types.UILayout):
+        if obj is not None and obj.ootActorCollider.colliderShape == "COLSHAPE_JNTSPH":
             armatureObj = obj.parent
             if obj.parent is not None and isinstance(obj.parent.data, bpy.types.Armature) and obj.parent_bone != "":
                 layout = layout.column()
                 layout.label(text="Joint Specific", icon="INFO")
-        layout = layout.column()
-        prop_split(layout, self, "element", "Element Type")
-        self.touch.draw(layout)
-        self.bump.draw(layout)
-        self.objectElem.draw(layout)
+            else:
+                return
+
+        if obj is not None and obj.ootActorCollider.colliderShape == "COLSHAPE_TRIS":
+            layout = layout.column()
+            layout.label(text="Touch/bump defined in materials.", icon="INFO")
+            layout.label(text="Materials will not be visualized.")
+        else:
+            layout = layout.column()
+            prop_split(layout, self, "element", "Element Type")
+            self.touch.draw(layout)
+            self.bump.draw(layout)
+            self.objectElem.draw(layout)
 
 
 class OOT_ActorColliderPanel(bpy.types.Panel):
@@ -399,6 +405,30 @@ class OOT_ActorColliderPanel(bpy.types.Panel):
             box.box().label(text=f"OOT Actor {name} Collider Inspector")
             obj.ootActorCollider.draw(obj, box)
             obj.ootActorColliderItem.draw(obj, box)
+
+
+class OOT_ActorColliderMaterialPanel(bpy.types.Panel):
+    bl_label = "OOT Actor Collider Material Inspector"
+    bl_idname = "OBJECT_PT_OOT_Actor_Collider_Material_Inspector"
+    bl_space_type = "PROPERTIES"
+    bl_region_type = "WINDOW"
+    bl_context = "material"
+    bl_options = {"HIDE_HEADER"}
+
+    @classmethod
+    def poll(cls, context: bpy.types.Context):
+        return (
+            context.scene.gameEditorMode == "OOT"
+            and (context.object is not None and isinstance(context.object.data, bpy.types.Mesh))
+            and context.object.ootGeometryType == "Actor Collider"
+            and context.material is not None
+        )
+
+    def draw(self, context: bpy.types.Context):
+        material = context.material
+        box = self.layout.box().column()
+        box.box().label(text=f"OOT Actor Mesh Collider Inspector")
+        material.ootActorColliderItem.draw(None, box)
 
 
 class OOT_AddActorCollider(bpy.types.Operator):
@@ -514,6 +544,13 @@ def addCollider(shapeName: str) -> bpy.types.Object:
     planeObj = bpy.context.view_layer.objects.active
     planeObj.name = "Collider"
     planeObj.ootGeometryType = "Actor Collider"
+
+    if shapeName == "COLSHAPE_CYLINDER":
+        planeObj.lock_location = (True, True, False)
+        planeObj.lock_rotation = (True, True, True)
+    elif shapeName == "COLSHAPE_TRIS":
+        planeObj.lock_location = (True, True, True)
+        planeObj.lock_rotation = (True, True, True)
 
     actorCollider = planeObj.ootActorCollider
     actorCollider.colliderShape = shapeName
@@ -707,7 +744,7 @@ oot_actor_collider_classes = (
     OOT_CopyColliderProperties,
 )
 
-oot_actor_collider_panel_classes = (OOT_ActorColliderPanel,)
+oot_actor_collider_panel_classes = (OOT_ActorColliderPanel, OOT_ActorColliderMaterialPanel)
 
 
 def oot_actor_collider_panel_register():
@@ -724,9 +761,9 @@ def oot_actor_collider_register():
     for cls in oot_actor_collider_classes:
         register_class(cls)
 
-    bpy.types.Object.ootGeometryType = bpy.props.EnumProperty(items=ootEnumGeometryType, name="Geometry Type")
     bpy.types.Object.ootActorCollider = bpy.props.PointerProperty(type=OOTActorColliderProperty)
     bpy.types.Object.ootActorColliderItem = bpy.props.PointerProperty(type=OOTActorColliderItemProperty)
+    bpy.types.Material.ootActorColliderItem = bpy.props.PointerProperty(type=OOTActorColliderItemProperty)
     bpy.types.Scene.ootColliderLibVer = bpy.props.IntProperty(default=1)
     bpy.types.Scene.ootColliderVisibility = bpy.props.PointerProperty(type=OOTColliderVisibilitySettings)
 
@@ -735,7 +772,6 @@ def oot_actor_collider_unregister():
     for cls in reversed(oot_actor_collider_classes):
         unregister_class(cls)
 
-    del bpy.types.Object.ootGeometryType
     del bpy.types.Object.ootActorCollider
     del bpy.types.Object.ootActorColliderItem
     del bpy.types.Scene.ootColliderLibVer

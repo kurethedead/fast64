@@ -422,6 +422,7 @@ def register():
 
     utility_anim_register()
     mat_register()
+    flipbook_register()
     render_engine_register()
     bsdf_conv_register()
     sm64_register(True)
@@ -432,7 +433,6 @@ def register():
 
     bsdf_conv_panel_regsiter()
     f3d_writer_register()
-    flipbook_register()
     f3d_parser_register()
 
     # ROM
