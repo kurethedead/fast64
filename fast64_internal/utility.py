@@ -117,13 +117,13 @@ def selectSingleObject(obj: bpy.types.Object):
     bpy.context.view_layer.objects.active = obj
 
 
-def parentObject(parent, child):
+def parentObject(parent, child, type="OBJECT"):
     bpy.ops.object.select_all(action="DESELECT")
 
     child.select_set(True)
     parent.select_set(True)
     bpy.context.view_layer.objects.active = parent
-    bpy.ops.object.parent_set(type="OBJECT", keep_transform=True)
+    bpy.ops.object.parent_set(type=type, keep_transform=True)
 
 
 def getFMeshName(vertexGroup, namePrefix, drawLayer, isSkinned):

@@ -4,6 +4,7 @@ from ..utility import *
 from ..f3d.f3d_material import *
 from ..operators import *
 from ..panels import OOT_Panel
+from .oot_actor_collider import OOT_AddActorCollider, OOT_CopyColliderProperties, drawColliderVisibilityOperators
 
 
 class OOT_AddWaterBox(AddWaterBox):
@@ -171,6 +172,16 @@ class OOT_OperatorsPanel(OOT_Panel):
         col.operator(OOT_AddWaterBox.bl_idname)
         col.operator(OOT_AddDoor.bl_idname)
         col.operator(OOT_AddCutscene.bl_idname)
+
+        col.label(text="")
+        col.label(text="Actor Colliders")
+        col.operator(OOT_AddActorCollider.bl_idname, text="Add Joint Sphere Colliders").shape = "COLSHAPE_JNTSPH"
+        col.operator(OOT_AddActorCollider.bl_idname, text="Add Cylinder Collider").shape = "COLSHAPE_CYLINDER"
+        col.operator(OOT_AddActorCollider.bl_idname, text="Add Mesh Collider").shape = "COLSHAPE_TRIS"
+
+        drawColliderVisibilityOperators(col)
+
+        col.operator(OOT_CopyColliderProperties.bl_idname, text="Copy Collider Properties (From Active To Selected)")
 
 
 oot_operator_classes = (

@@ -1,7 +1,13 @@
-import bpy
+from typing import Dict
+import bpy, mathutils, os
 from bpy.utils import register_class, unregister_class
-from ..utility import prop_split
+from ..utility import PluginError, prop_split, parentObject, raisePluginError, copyPropertyGroup
+from bpy.app.handlers import persistent
+import logging
+from ..f3d.f3d_material import createF3DMat, update_preset_manual
 
+logging.basicConfig(format="%(asctime)s: %(message)s", datefmt="%m/%d/%Y %I:%M:%S %p")
+logger = logging.getLogger(__name__)
 
 ootEnumGeometryType = [
     ("Regular", "Regular", "Regular"),
@@ -48,6 +54,31 @@ ootEnumHitboxSound = [
     ("TOUCH_SFX_WOOD", "Wood", "Wood"),
     ("TOUCH_SFX_NONE", "None", "None"),
 ]
+
+
+def updateCollider(self, context: bpy.types.Context) -> None:
+    updateColliderOnObj(context.object)
+
+
+def updateColliderOnObj(obj: bpy.types.Object) -> None:
+    if obj.ootGeometryType == "Actor Collider":
+        colliderProp = obj.ootActorCollider
+        if colliderProp.colliderShape == "COLSHAPE_JNTSPH":
+            if obj.parent == None:
+                return
+            queryProp = obj.parent.ootActorCollider
+        else:
+            queryProp = colliderProp
+        if queryProp.hitbox.enable and (queryProp.hurtbox.enable or queryProp.physics.enable):
+            material = getColliderMat("oot_collider_magenta", (1, 0, 1, 0.5))
+        elif queryProp.hitbox.enable:
+            material = getColliderMat("oot_collider_red", (1, 0, 0, 0.5))
+        elif queryProp.hurtbox.enable or queryProp.physics.enable:
+            material = getColliderMat("oot_collider_blue", (0, 0, 1, 0.5))
+        else:
+            material = getColliderMat("oot_collider_white", (1, 1, 1, 0.5))
+        applyColliderGeoNodes(obj, material, colliderProp.colliderShape)
+
 
 # Defaults are from DMG_DEFAULT.
 class OOTDamageFlagsProperty(bpy.types.PropertyGroup):
@@ -152,7 +183,7 @@ class OOTDamageFlagsProperty(bpy.types.PropertyGroup):
 
 # AT
 class OOTColliderHitboxProperty(bpy.types.PropertyGroup):
-    enable: bpy.props.BoolProperty(name="Hitbox (AT)")
+    enable: bpy.props.BoolProperty(name="Hitbox (AT)", update=updateCollider, default=False)
     attacksBounceOff: bpy.props.BoolProperty(name="Attacks Bounce Off")
     alignPlayer: bpy.props.BoolProperty(name="Player", default=False)
     alignEnemy: bpy.props.BoolProperty(name="Enemy", default=True)
@@ -174,7 +205,7 @@ class OOTColliderHitboxProperty(bpy.types.PropertyGroup):
 
 # AC
 class OOTColliderHurtboxProperty(bpy.types.PropertyGroup):
-    enable: bpy.props.BoolProperty(name="Hurtbox (AC)")
+    enable: bpy.props.BoolProperty(name="Hurtbox (AC)", update=updateCollider, default=True)
     attacksBounceOff: bpy.props.BoolProperty(name="Attacks Bounce Off")
     hurtByPlayer: bpy.props.BoolProperty(name="Player", default=True)
     hurtByEnemy: bpy.props.BoolProperty(name="Enemy", default=False)
@@ -207,7 +238,7 @@ class OOTColliderLayers(bpy.types.PropertyGroup):
 
 # OC
 class OOTColliderPhysicsProperty(bpy.types.PropertyGroup):
-    enable: bpy.props.BoolProperty(name="Physics (OC)")
+    enable: bpy.props.BoolProperty(name="Physics (OC)", update=updateCollider, default=True)
     noPush: bpy.props.BoolProperty(name="Don't Push Others")
     collidesWith: bpy.props.PointerProperty(type=OOTColliderLayers)
     isCollider: bpy.props.PointerProperty(type=OOTColliderLayers)
@@ -300,19 +331,20 @@ class OOTColliderPhysicsItemProperty(bpy.types.PropertyGroup):
 
 class OOTActorColliderProperty(bpy.types.PropertyGroup):
     # ColliderInit
-    colliderShape: bpy.props.EnumProperty(items=ootEnumColliderShape, name="Shape", default="COLSHAPE_CYLINDER")
+    colliderShape: bpy.props.EnumProperty(
+        items=ootEnumColliderShape, name="Shape", default="COLSHAPE_CYLINDER", update=updateCollider
+    )
     colliderType: bpy.props.EnumProperty(items=ootEnumColliderType, name="Hit Reaction")
     hitbox: bpy.props.PointerProperty(type=OOTColliderHitboxProperty, name="Hitbox (AT)")
     hurtbox: bpy.props.PointerProperty(type=OOTColliderHurtboxProperty, name="Hurtbox (AC)")
     physics: bpy.props.PointerProperty(type=OOTColliderPhysicsProperty, name="Physics (OC)")
 
     def draw(self, obj: bpy.types.Object, layout: bpy.types.UILayout):
-        prop_split(layout, self, "colliderShape", "Collider Shape")
         if obj.ootActorCollider.colliderShape == "COLSHAPE_JNTSPH":
             armatureObj = obj.parent
             if obj.parent is not None and isinstance(obj.parent.data, bpy.types.Armature) and obj.parent_bone != "":
                 layout.label(text="Armature Specific", icon="INFO")
-                prop_split(layout, armatureObj, "colliderType", "Collider Type")
+                prop_split(layout, armatureObj.ootActorCollider, "colliderType", "Collider Type")
                 armatureObj.ootActorCollider.hitbox.draw(layout)
                 armatureObj.ootActorCollider.hurtbox.draw(layout)
                 armatureObj.ootActorCollider.physics.draw(layout)
@@ -338,16 +370,11 @@ class OOTActorColliderItemProperty(bpy.types.PropertyGroup):
             if obj.parent is not None and isinstance(obj.parent.data, bpy.types.Armature) and obj.parent_bone != "":
                 layout = layout.column()
                 layout.label(text="Joint Specific", icon="INFO")
-                prop_split(layout, armatureObj, "element", "Element Type")
-                armatureObj.ootActorColliderItem.touch.draw(layout)
-                armatureObj.ootActorColliderItem.bump.draw(layout)
-                armatureObj.ootActorColliderItem.objectElem.draw(layout)
-        else:
-            layout = layout.column()
-            prop_split(layout, self, "element", "Element Type")
-            self.touch.draw(layout)
-            self.bump.draw(layout)
-            self.objectElem.draw(layout)
+        layout = layout.column()
+        prop_split(layout, self, "element", "Element Type")
+        self.touch.draw(layout)
+        self.bump.draw(layout)
+        self.objectElem.draw(layout)
 
 
 class OOT_ActorColliderPanel(bpy.types.Panel):
@@ -365,20 +392,303 @@ class OOT_ActorColliderPanel(bpy.types.Panel):
         )
 
     def draw(self, context: bpy.types.Context):
-        box = self.layout.box().column()
-        box.box().label(text="OOT Actor Collider Inspector")
         obj = context.object
-
-        # prop_split(box, obj, "ootDrawLayer", "Draw Layer")
-        prop_split(box, obj, "ootGeometryType", "Geometry Type")
         if obj.ootGeometryType == "Actor Collider":
+            box = self.layout.box().column()
+            name = shapeNameToSimpleName(obj.ootActorCollider.colliderShape)
+            box.box().label(text=f"OOT Actor {name} Collider Inspector")
             obj.ootActorCollider.draw(obj, box)
             obj.ootActorColliderItem.draw(obj, box)
 
-        # Doesn't work since all static meshes are pre-transformed
-        # box.prop(obj.ootDynamicTransform, "billboard")
 
-        # drawParentSceneRoom(box, obj)
+class OOT_AddActorCollider(bpy.types.Operator):
+    bl_idname = "object.oot_add_actor_collider_operator"
+    bl_label = "Add Actor Collider"
+    bl_options = {"REGISTER", "UNDO", "PRESET"}
+
+    shape: bpy.props.EnumProperty(items=ootEnumColliderShape)
+
+    def execute(self, context):
+        link_oot_collider_library()
+
+        try:
+            activeObj = bpy.context.view_layer.objects.active
+            selectedObjs = bpy.context.selected_objects
+
+            if activeObj is None:
+                raise PluginError("No object selected.")
+
+            if context.mode != "OBJECT":
+                bpy.ops.object.mode_set(mode="OBJECT")
+            bpy.ops.object.select_all(action="DESELECT")
+
+            if self.shape == "COLSHAPE_JNTSPH":
+                if isinstance(activeObj.data, bpy.types.Armature):
+                    selectedBones = [bone for bone in activeObj.data.bones if bone.select]
+                    if len(selectedBones) == 0:
+                        raise PluginError("Cannot add joint spheres since no bones are selected on armature.")
+                    for bone in selectedBones:
+                        addColliderThenParent(self.shape, activeObj, bone)
+                else:
+                    raise PluginError("Cannot add joint spheres to non armature object.")
+            else:
+                addColliderThenParent(self.shape, activeObj, None)
+
+        except Exception as e:
+            raisePluginError(self, e)
+            return {"CANCELLED"}
+
+        return {"FINISHED"}
+
+
+class OOT_CopyColliderProperties(bpy.types.Operator):
+    bl_idname = "object.oot_copy_collider_properties_operator"
+    bl_label = "Copy Collider Properties"
+    bl_options = {"REGISTER", "UNDO", "PRESET"}
+
+    def execute(self, context):
+        try:
+            activeObj = bpy.context.view_layer.objects.active
+            selectedObjs = [obj for obj in bpy.context.selected_objects if obj.ootGeometryType == "Actor Collider"]
+
+            if activeObj is None:
+                raise PluginError("No object selected.")
+
+            if activeObj.ootGeometryType != "Actor Collider":
+                raise PluginError("Active object is not an actor collider.")
+
+            if context.mode != "OBJECT":
+                bpy.ops.object.mode_set(mode="OBJECT")
+            bpy.ops.object.select_all(action="DESELECT")
+
+            if (
+                activeObj.ootActorCollider.colliderShape == "COLSHAPE_JNTSPH"
+                and activeObj.parent is not None
+                and isinstance(activeObj.parent.data, bpy.types.Armature)
+            ):
+                parentCollider = activeObj.parent.ootActorCollider
+            else:
+                parentCollider = activeObj.ootActorCollider
+
+            for obj in selectedObjs:
+                if (
+                    obj.ootActorCollider.colliderShape == "COLSHAPE_JNTSPH"
+                    and obj.parent is not None
+                    and isinstance(obj.parent.data, bpy.types.Armature)
+                ):
+                    copyPropertyGroup(parentCollider, obj.parent.ootActorCollider)
+                else:
+                    copyPropertyGroup(parentCollider, obj.ootActorCollider)
+                copyPropertyGroup(activeObj.ootActorColliderItem, obj.ootActorColliderItem)
+
+                updateColliderOnObj(obj)
+
+        except Exception as e:
+            raisePluginError(self, e)
+            return {"CANCELLED"}
+
+        return {"FINISHED"}
+
+
+def addColliderThenParent(shapeName: str, obj: bpy.types.Object, bone: bpy.types.Bone | None) -> bpy.types.Object:
+    colliderObj = addCollider(shapeName)
+    if bone is not None:
+        parentObject(obj, colliderObj, "BONE")
+        colliderObj.parent_bone = bone.name
+        colliderObj.matrix_world = obj.matrix_world @ obj.pose.bones[bone.name].matrix
+    else:
+        parentObject(obj, colliderObj)
+        colliderObj.matrix_local = mathutils.Matrix.Identity(4)
+    updateColliderOnObj(colliderObj)
+    return colliderObj
+
+
+def addCollider(shapeName: str) -> bpy.types.Object:
+    if bpy.context.mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.ops.object.select_all(action="DESELECT")
+
+    # Mesh shape only matters for Triangle shape, otherwise will be controlled by geometry nodes.
+    location = mathutils.Vector(bpy.context.scene.cursor.location)
+    bpy.ops.mesh.primitive_plane_add(size=2, enter_editmode=False, align="WORLD", location=location[:])
+    planeObj = bpy.context.view_layer.objects.active
+    planeObj.name = "Collider"
+    planeObj.ootGeometryType = "Actor Collider"
+
+    actorCollider = planeObj.ootActorCollider
+    actorCollider.colliderShape = shapeName
+    actorCollider.physics.enable = True
+    return planeObj
+
+
+# Apply geometry nodes for the correct collider shape
+def applyColliderGeoNodes(obj: bpy.types.Object, material: bpy.types.Material, shapeName: str) -> None:
+    nodesName = shapeNameToBlenderName(shapeName)
+
+    if nodesName in bpy.data.node_groups:
+        if "Collider Shape" not in obj.modifiers:
+            modifier = obj.modifiers.new("Collider Shape", "NODES")
+        else:
+            modifier = obj.modifiers["Collider Shape"]
+        modifier.node_group = bpy.data.node_groups[nodesName]
+        modifier["Input_2"] = material
+    else:
+        raise PluginError(f"Could not find node group name: {nodesName}")
+
+
+# Creates a semi-transparent solid color material (cached)
+def getColliderMat(name: str, color: tuple[float, float, float, float]) -> bpy.types.Material:
+    if name not in bpy.data.materials:
+        newMat = createF3DMat(None, preset="oot_unlit_texture_transparent", index=0)
+        newMat.name = name
+        newMat.f3d_mat.combiner1.D = "1"
+        newMat.f3d_mat.combiner1.D_alpha = "1"
+        newMat.f3d_mat.prim_color = color
+        update_preset_manual(newMat, bpy.context)
+        return newMat
+    else:
+        return bpy.data.materials[name]
+
+
+# unused? right now decided to go with regular hiding instead
+def getColliderCollection(shapeName: str | None) -> bpy.types.Collection:
+    if "OOT Colliders" not in bpy.data.collections:
+        colliderCollection = bpy.data.collections.new("OOT Colliders")
+        bpy.context.scene.collection.children.link(colliderCollection)
+    else:
+        colliderCollection = bpy.data.collections["OOT Colliders"]
+
+    if shapeName is None:
+        return colliderCollection
+
+    name = shapeNameToBlenderName(shapeName)
+    if name not in bpy.data.collections:
+        shapeCollection = bpy.data.collections.new(name)
+        colliderCollection.children.link(shapeCollection)
+    else:
+        shapeCollection = bpy.data.collections[name]
+
+    return shapeCollection
+
+
+def shapeNameToBlenderName(shapeName: str) -> str:
+    return shapeNameLookup(
+        shapeName,
+        {
+            "COLSHAPE_JNTSPH": "oot_collider_sphere",
+            "COLSHAPE_CYLINDER": "oot_collider_cylinder",
+            "COLSHAPE_TRIS": "oot_collider_triangles",
+        },
+    )
+
+
+def shapeNameToSimpleName(shapeName: str) -> str:
+    return shapeNameLookup(
+        shapeName,
+        {
+            "COLSHAPE_JNTSPH": "Sphere",
+            "COLSHAPE_CYLINDER": "Cylinder",
+            "COLSHAPE_TRIS": "Mesh",
+        },
+    )
+
+
+def shapeNameLookup(shapeName: str, nameDict: Dict[str, str]) -> str:
+    if shapeName in nameDict:
+        name = nameDict[shapeName]
+        return name
+    else:
+        raise PluginError(f"Could not find shape name {shapeName} in name dictionary.")
+
+
+def drawColliderVisibilityOperators(layout: bpy.types.UILayout):
+    col = layout.column()
+    col.label(text="Toggle Visibility (Excluding Selected)")
+    row = col.row(align=True)
+    visibilitySettings = bpy.context.scene.ootColliderVisibility
+    row.prop(visibilitySettings, "jointSphere", text="Joint Sphere", toggle=1)
+    row.prop(visibilitySettings, "cylinder", text="Cylinder", toggle=1)
+    row.prop(visibilitySettings, "mesh", text="Mesh", toggle=1)
+
+
+@persistent
+def load_handler(dummy):
+    logger.info("Checking for base F3D material library.")
+
+    for lib in bpy.data.libraries:
+        lib_path = bpy.path.abspath(lib.filepath)
+
+        # detect if this is one your addon's libraries here
+        if "oot_collider_library.blend" in lib_path:
+
+            addon_dir = os.path.dirname(os.path.abspath(__file__))
+            new_lib_path = os.path.join(addon_dir, "oot_collider_library.blend")
+
+            if lib_path != new_lib_path:
+                logger.info("Reloading the library: %s : %s => %s" % (lib.name, lib_path, new_lib_path))
+
+                lib.filepath = new_lib_path
+                lib.reload()
+            bpy.context.scene["oot_collider_lib_dir"] = None  # force node reload!
+            link_oot_collider_library()
+
+
+def link_oot_collider_library():
+    dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "oot_collider_library.blend")
+
+    prevMode = bpy.context.mode
+    if prevMode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+    with bpy.data.libraries.load(dir) as (data_from, data_to):
+        dirNode = os.path.join(dir, "NodeTree")
+
+        # linking is SUPER slow, this only links if the scene hasnt been linked yet
+        if bpy.context.scene.get("oot_collider_lib_dir") != dirNode or (
+            "oot_collider_lib_ver" in bpy.context.scene
+            and bpy.context.scene.ootColliderLibVer > bpy.context.scene["oot_collider_lib_ver"]
+        ):
+            for node_group in data_from.node_groups:
+                if node_group is not None:
+                    # append to prevent filepath issues
+                    bpy.ops.wm.link(
+                        filepath=os.path.join(dirNode, node_group), directory=dirNode, filename=node_group, link=False
+                    )
+            bpy.context.scene["oot_collider_lib_dir"] = dirNode
+            bpy.context.scene["oot_collider_lib_ver"] = bpy.context.scene.ootColliderLibVer
+
+
+bpy.app.handlers.load_post.append(load_handler)
+
+
+def updateVisibilityJointSphere(self, context):
+    updateVisibilityCollider("COLSHAPE_JNTSPH", self.jointSphere)
+
+
+def updateVisibilityCylinder(self, context):
+    updateVisibilityCollider("COLSHAPE_CYLINDER", self.cylinder)
+
+
+def updateVisibilityMesh(self, context):
+    updateVisibilityCollider("COLSHAPE_TRIS", self.mesh)
+
+
+def updateVisibilityCollider(shapeName: str, visibility: bool) -> None:
+    selectedObjs = bpy.context.selected_objects
+    for obj in bpy.data.objects:
+        if (
+            isinstance(obj.data, bpy.types.Mesh)
+            and obj.ootGeometryType == "Actor Collider"
+            and obj.ootActorCollider.colliderShape == shapeName
+            and obj not in selectedObjs
+        ):
+            obj.hide_set(not visibility)
+
+
+class OOTColliderVisibilitySettings(bpy.types.PropertyGroup):
+    jointSphere: bpy.props.BoolProperty(name="Joint Sphere", default=True, update=updateVisibilityJointSphere)
+    cylinder: bpy.props.BoolProperty(name="Cylinder", default=True, update=updateVisibilityCylinder)
+    mesh: bpy.props.BoolProperty(name="Mesh", default=True, update=updateVisibilityMesh)
 
 
 oot_actor_collider_classes = (
@@ -392,6 +702,9 @@ oot_actor_collider_classes = (
     OOTColliderPhysicsProperty,
     OOTActorColliderProperty,
     OOTActorColliderItemProperty,
+    OOT_AddActorCollider,
+    OOTColliderVisibilitySettings,
+    OOT_CopyColliderProperties,
 )
 
 oot_actor_collider_panel_classes = (OOT_ActorColliderPanel,)
@@ -414,6 +727,8 @@ def oot_actor_collider_register():
     bpy.types.Object.ootGeometryType = bpy.props.EnumProperty(items=ootEnumGeometryType, name="Geometry Type")
     bpy.types.Object.ootActorCollider = bpy.props.PointerProperty(type=OOTActorColliderProperty)
     bpy.types.Object.ootActorColliderItem = bpy.props.PointerProperty(type=OOTActorColliderItemProperty)
+    bpy.types.Scene.ootColliderLibVer = bpy.props.IntProperty(default=1)
+    bpy.types.Scene.ootColliderVisibility = bpy.props.PointerProperty(type=OOTColliderVisibilitySettings)
 
 
 def oot_actor_collider_unregister():
@@ -423,3 +738,5 @@ def oot_actor_collider_unregister():
     del bpy.types.Object.ootGeometryType
     del bpy.types.Object.ootActorCollider
     del bpy.types.Object.ootActorColliderItem
+    del bpy.types.Scene.ootColliderLibVer
+    del bpy.types.Scene.ootColliderVisibility

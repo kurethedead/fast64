@@ -367,18 +367,19 @@ class OOT_DisplayListPanel(bpy.types.Panel):
         )
 
     def draw(self, context):
-        box = self.layout.box()
-        box.box().label(text="OOT DL Inspector")
         obj = context.object
+        if obj.ootGeometryType == "Regular":
+            box = self.layout.box()
+            box.box().label(text="OOT DL Inspector")
 
-        # prop_split(box, obj, "ootDrawLayer", "Draw Layer")
-        box.prop(obj, "ignore_render")
-        box.prop(obj, "ignore_collision")
+            # prop_split(box, obj, "ootDrawLayer", "Draw Layer")
+            box.prop(obj, "ignore_render")
+            box.prop(obj, "ignore_collision")
 
-        # Doesn't work since all static meshes are pre-transformed
-        # box.prop(obj.ootDynamicTransform, "billboard")
+            # Doesn't work since all static meshes are pre-transformed
+            # box.prop(obj.ootDynamicTransform, "billboard")
 
-        # drawParentSceneRoom(box, obj)
+            # drawParentSceneRoom(box, obj)
 
 
 class OOT_ImportDL(bpy.types.Operator):
