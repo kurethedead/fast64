@@ -1558,3 +1558,44 @@ ootDrawConfigNames = [
     "SDC_GANON_SONOGO",
     "SDC_GANONTIKA_SONOGO",
 ]
+
+ootEnumColliderShape = [
+    ("COLSHAPE_JNTSPH", "Joint Sphere", "Joint Sphere"),
+    ("COLSHAPE_CYLINDER", "Cylinder", "Cylinder"),
+    ("COLSHAPE_TRIS", "Triangles", "Triangles"),
+]
+
+ootEnumColliderType = [
+    ("COLTYPE_HIT0", "Blue Blood, White Hitmark", "Blue Blood, White Hitmark"),
+    ("COLTYPE_HIT1", "No Blood, Dust Hitmark", "No Blood, Dust Hitmark"),
+    ("COLTYPE_HIT2", "Green Blood, Dust Hitmark", "Green Blood, Dust Hitmark"),
+    ("COLTYPE_HIT3", "No Blood, White Hitmark", "No Blood, White Hitmark"),
+    ("COLTYPE_HIT4", "Water Burst, No hitmark", "Water Burst, No hitmark"),
+    ("COLTYPE_HIT5", "No blood, Red Hitmark", "No blood, Red Hitmark"),
+    ("COLTYPE_HIT6", "Green Blood, White Hitmark", "Green Blood, White Hitmark"),
+    ("COLTYPE_HIT7", "Red Blood, White Hitmark", "Red Blood, White Hitmark"),
+    ("COLTYPE_HIT8", "Blue Blood, Red Hitmark", "Blue Blood, Red Hitmark"),
+    ("COLTYPE_META", "Meta", "Meta"),
+    ("COLTYPE_NONE", "None", "None"),
+    ("COLTYPE_WOOD", "Wood", "Wood"),
+    ("COLTYPE_HARD", "Hard", "Hard"),
+    ("COLTYPE_TREE", "Tree", "Tree"),
+]
+
+ootEnumColliderElement = [
+    ("ELEMTYPE_UNK0", "Element 0", "Element 0"),
+    ("ELEMTYPE_UNK1", "Element 1", "Element 1"),
+    ("ELEMTYPE_UNK2", "Element 2", "Element 2"),
+    ("ELEMTYPE_UNK3", "Element 3", "Element 3"),
+    ("ELEMTYPE_UNK4", "Element 4", "Element 4"),
+    ("ELEMTYPE_UNK5", "Element 5", "Element 5"),
+    ("ELEMTYPE_UNK6", "Element 6", "Element 6"),
+    ("ELEMTYPE_UNK7", "Element 7", "Element 7"),
+]
+
+ootEnumHitboxSound = [
+    ("TOUCH_SFX_NORMAL", "Hurtbox", "Hurtbox"),
+    ("TOUCH_SFX_HARD", "Hard", "Hard"),
+    ("TOUCH_SFX_WOOD", "Wood", "Wood"),
+    ("TOUCH_SFX_NONE", "None", "None"),
+]

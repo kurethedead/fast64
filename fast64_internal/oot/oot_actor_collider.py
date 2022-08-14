@@ -5,50 +5,10 @@ from ..utility import PluginError, prop_split, parentObject, raisePluginError, c
 from bpy.app.handlers import persistent
 import logging
 from ..f3d.f3d_material import createF3DMat, update_preset_manual
+from .oot_constants import ootEnumColliderShape, ootEnumColliderType, ootEnumColliderElement, ootEnumHitboxSound
 
 logging.basicConfig(format="%(asctime)s: %(message)s", datefmt="%m/%d/%Y %I:%M:%S %p")
 logger = logging.getLogger(__name__)
-
-ootEnumColliderShape = [
-    ("COLSHAPE_JNTSPH", "Joint Sphere", "Joint Sphere"),
-    ("COLSHAPE_CYLINDER", "Cylinder", "Cylinder"),
-    ("COLSHAPE_TRIS", "Triangles", "Triangles"),
-]
-
-ootEnumColliderType = [
-    ("COLTYPE_HIT0", "Blue Blood, White Hitmark", "Blue Blood, White Hitmark"),
-    ("COLTYPE_HIT1", "No Blood, Dust Hitmark", "No Blood, Dust Hitmark"),
-    ("COLTYPE_HIT2", "Green Blood, Dust Hitmark", "Green Blood, Dust Hitmark"),
-    ("COLTYPE_HIT3", "No Blood, White Hitmark", "No Blood, White Hitmark"),
-    ("COLTYPE_HIT4", "Water Burst, No hitmark", "Water Burst, No hitmark"),
-    ("COLTYPE_HIT5", "No blood, Red Hitmark", "No blood, Red Hitmark"),
-    ("COLTYPE_HIT6", "Green Blood, White Hitmark", "Green Blood, White Hitmark"),
-    ("COLTYPE_HIT7", "Red Blood, White Hitmark", "Red Blood, White Hitmark"),
-    ("COLTYPE_HIT8", "Blue Blood, Red Hitmark", "Blue Blood, Red Hitmark"),
-    ("COLTYPE_META", "Meta", "Meta"),
-    ("COLTYPE_NONE", "None", "None"),
-    ("COLTYPE_WOOD", "Wood", "Wood"),
-    ("COLTYPE_HARD", "Hard", "Hard"),
-    ("COLTYPE_TREE", "Tree", "Tree"),
-]
-
-ootEnumColliderElement = [
-    ("ELEMTYPE_UNK0", "Element 0", "Element 0"),
-    ("ELEMTYPE_UNK1", "Element 1", "Element 1"),
-    ("ELEMTYPE_UNK2", "Element 2", "Element 2"),
-    ("ELEMTYPE_UNK3", "Element 3", "Element 3"),
-    ("ELEMTYPE_UNK4", "Element 4", "Element 4"),
-    ("ELEMTYPE_UNK5", "Element 5", "Element 5"),
-    ("ELEMTYPE_UNK6", "Element 6", "Element 6"),
-    ("ELEMTYPE_UNK7", "Element 7", "Element 7"),
-]
-
-ootEnumHitboxSound = [
-    ("TOUCH_SFX_NORMAL", "Hurtbox", "Hurtbox"),
-    ("TOUCH_SFX_HARD", "Hard", "Hard"),
-    ("TOUCH_SFX_WOOD", "Wood", "Wood"),
-    ("TOUCH_SFX_NONE", "None", "None"),
-]
 
 
 def updateCollider(self, context: bpy.types.Context) -> None:
@@ -212,12 +172,14 @@ class OOTColliderHurtboxProperty(bpy.types.PropertyGroup):
     hurtByPlayer: bpy.props.BoolProperty(name="Player", default=True)
     hurtByEnemy: bpy.props.BoolProperty(name="Enemy", default=False)
     hurtByOther: bpy.props.BoolProperty(name="Other", default=False)
+    noDamage: bpy.props.BoolProperty(name="Doesn't Take Damage", default=False)
 
     def draw(self, layout: bpy.types.UILayout):
         layout = layout.box().column()
         layout.prop(self, "enable")
         if self.enable:
             layout.prop(self, "attacksBounceOff")
+            layout.prop(self, "noDamage")
             hurtToggles = layout.row(align=True)
             hurtToggles.label(text="Hurt By")
             hurtToggles.prop(self, "hurtByPlayer", toggle=1)
@@ -246,6 +208,8 @@ class OOTColliderPhysicsProperty(bpy.types.PropertyGroup):
     isCollider: bpy.props.PointerProperty(type=OOTColliderLayers)
     skipHurtboxCheck: bpy.props.BoolProperty(name="Skip Hurtbox Check After First Collision")
     isType1: bpy.props.BoolProperty(name="Is Type 1", default=False)
+    unk1: bpy.props.BoolProperty(name="Unknown 1", default=False)
+    unk2: bpy.props.BoolProperty(name="Unknown 2", default=False)
 
     def draw(self, layout: bpy.types.UILayout):
         layout = layout.box().column()
@@ -257,6 +221,9 @@ class OOTColliderPhysicsProperty(bpy.types.PropertyGroup):
             self.collidesWith.draw(layout, "Hits Type")
             if not self.isType1:
                 self.isCollider.draw(layout, "Is Type")
+            row = layout.row(align=True)
+            row.prop(self, "unk1")
+            row.prop(self, "unk2")
 
 
 # Touch

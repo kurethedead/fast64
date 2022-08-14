@@ -13,6 +13,7 @@ from ..f3d.f3d_writer import *
 from ..f3d.f3d_material import TextureProperty, tmemUsageUI
 from .oot_f3d_writer import *
 from .oot_texture_array import ootReadTextureArrays
+from .oot_actor_collider_c import parseColliderData
 
 ootEnumBoneType = [
     ("Default", "Default", "Default"),
@@ -658,6 +659,7 @@ def ootImportSkeletonC(
     drawLayer,
     isLink,
     arrayIndex2D: int,
+    includeColliders: bool,
 ):
     skeletonData = getImportData(filepaths)
     if overlayName is not None or isLink:
@@ -707,6 +709,9 @@ def ootImportSkeletonC(
         armatureObj.ootFarLOD = LODArmatureObj
 
     f3dContext.deleteMaterialContext()
+
+    if includeColliders:
+        parseColliderData(basePath, overlayName, isLink, armatureObj)
 
 
 def ootBuildSkeleton(
@@ -953,6 +958,7 @@ class OOT_ImportSkeleton(bpy.types.Operator):
             isLink = bpy.context.scene.ootSkeletonImportIsLink
             is2DArray = context.scene.ootSkeletonImportIs2DArray
             arrayIndex2D = context.scene.ootSkeletonImportArrayIndex2D if isLink or is2DArray else None
+            includeColliders = context.scene.ootSkeletonImportIncludeColliders
 
             filepaths = [ootGetObjectPath(isCustomImport, importPath, folderName)]
 
@@ -967,6 +973,7 @@ class OOT_ImportSkeleton(bpy.types.Operator):
                 drawLayer,
                 isLink,
                 arrayIndex2D,
+                includeColliders,
             )
 
             self.report({"INFO"}, "Success!")
@@ -1028,6 +1035,7 @@ class OOT_ExportSkeleton(bpy.types.Operator):
             isLink = context.scene.ootSkeletonExportIsLink
             is2DArray = context.scene.ootSkeletonExportIs2DArray
             arrayIndex2D = context.scene.ootSkeletonExportArrayIndex2D if isLink or is2DArray else None
+            includeColliders = context.scene.ootSkeletonExportIncludeColliders
 
             ootConvertArmatureToC(
                 armatureObj,
@@ -1086,6 +1094,7 @@ class OOT_ExportSkeletonPanel(OOT_Panel):
                         box.label(text="Child Link", icon="OPTIONS")
                     box.label(text="Requires enabling NON_MATCHING in Makefile.", icon="ERROR")
         col.prop(context.scene, "ootSkeletonExportUseCustomPath")
+        col.prop(context.scene, "ootSkeletonExportIncludeColliders")
         col.prop(context.scene, "ootSkeletonExportOptimize")
         if context.scene.ootSkeletonExportOptimize:
             b = col.box().column()
@@ -1122,6 +1131,7 @@ class OOT_ExportSkeletonPanel(OOT_Panel):
                     text="This actor has a 2D texture array and will not import correctly unless the array is flattened.",
                     icon="ERROR",
                 )
+            col.prop(context.scene, "ootSkeletonImportIncludeColliders")
 
         prop_split(col, context.scene, "ootActorImportDrawLayer", "Import Draw Layer")
 
@@ -1231,6 +1241,9 @@ def oot_skeleton_register():
         + "If enabled, the skeleton limbs must be drawn in their normal order, "
         + "with nothing in between and no culling, otherwise the mesh will be corrupted.",
     )
+    bpy.types.Scene.ootSkeletonExportIncludeColliders = bpy.props.BoolProperty(
+        name="Include Actor Colliders", default=False
+    )
 
     bpy.types.Scene.ootSkeletonImportName = bpy.props.StringProperty(name="Skeleton Name", default="gGerudoRedSkel")
     bpy.types.Scene.ootSkeletonImportFolderName = bpy.props.StringProperty(
@@ -1244,6 +1257,9 @@ def oot_skeleton_register():
         name="Custom Skeleton Path", subtype="FILE_PATH"
     )
     bpy.types.Scene.ootSkeletonImportUseCustomPath = bpy.props.BoolProperty(name="Use Custom Path")
+    bpy.types.Scene.ootSkeletonImportIncludeColliders = bpy.props.BoolProperty(
+        name="Include Actor Colliders", default=False
+    )
 
     bpy.types.Scene.ootActorRemoveDoubles = bpy.props.BoolProperty(name="Remove Doubles On Import", default=True)
     bpy.types.Scene.ootActorImportNormals = bpy.props.BoolProperty(name="Import Normals", default=True)
@@ -1272,6 +1288,7 @@ def oot_skeleton_unregister():
     del bpy.types.Scene.ootSkeletonExportCustomPath
     del bpy.types.Scene.ootSkeletonExportUseCustomPath
     del bpy.types.Scene.ootSkeletonExportOptimize
+    del bpy.types.Scene.ootSkeletonExportIncludeColliders
 
     del bpy.types.Scene.ootSkeletonImportName
     del bpy.types.Scene.ootSkeletonImportFolderName
@@ -1281,6 +1298,7 @@ def oot_skeleton_unregister():
     del bpy.types.Scene.ootSkeletonImportIs2DArray
     del bpy.types.Scene.ootSkeletonImportCustomPath
     del bpy.types.Scene.ootSkeletonImportUseCustomPath
+    del bpy.types.Scene.ootSkeletonImportIncludeColliders
 
     del bpy.types.Scene.ootActorRemoveDoubles
     del bpy.types.Scene.ootActorImportNormals
