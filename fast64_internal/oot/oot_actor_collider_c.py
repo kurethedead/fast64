@@ -1,5 +1,5 @@
-import bpy, mathutils, os, re
-from ..utility import PluginError, hexOrDecInt
+import bpy, mathutils, os, re, math
+from ..utility import PluginError, hexOrDecInt, toAlnum
 from .oot_model_classes import ootGetActorData, ootGetIncludedAssetData, ootGetActorDataPaths, ootGetLinkData
 from .oot_constants import ootEnumColliderShape, ootEnumColliderType, ootEnumColliderElement, ootEnumHitboxSound
 from .oot_actor_collider import (
@@ -101,55 +101,55 @@ def parseOCFlags(oc1Data: str, oc2Data: str | None, ocProp: OOTColliderPhysicsPr
         ocProp.unk2 = "OC2_UNK2" in flags2
 
 
-def parseColliderInit(match: re.Match, colliderProp: OOTActorColliderProperty):
-    colliderProp.colliderType = getEnumValue(match.group(1).strip(), ootEnumColliderType)
-    parseATFlags(match.group(2), colliderProp.hitbox)
-    parseACFlags(match.group(3), colliderProp.hurtbox)
-    parseOCFlags(match.group(4), match.group(5), colliderProp.physics)
+def parseColliderInit(dataList: list[str], colliderProp: OOTActorColliderProperty):
+    colliderProp.colliderType = getEnumValue(dataList[0].strip(), ootEnumColliderType)
+    parseATFlags(dataList[1], colliderProp.hitbox)
+    parseACFlags(dataList[2], colliderProp.hurtbox)
+    parseOCFlags(dataList[3], dataList[4], colliderProp.physics)
 
 
 def parseDamageFlags(flags: int, flagProp: OOTDamageFlagsProperty):
-    flagProp.dekuNut = flags & (1 << 0)
-    flagProp.dekuStick = flags & (1 << 1)
-    flagProp.slingshot = flags & (1 << 2)
-    flagProp.explosive = flags & (1 << 3)
-    flagProp.boomerang = flags & (1 << 4)
-    flagProp.arrowNormal = flags & (1 << 5)
-    flagProp.hammerSwing = flags & (1 << 6)
-    flagProp.hookshot = flags & (1 << 7)
-    flagProp.slashKokiriSword = flags & (1 << 8)
-    flagProp.slashMasterSword = flags & (1 << 9)
-    flagProp.slashGiantSword = flags & (1 << 10)
-    flagProp.arrowFire = flags & (1 << 11)
-    flagProp.arrowIce = flags & (1 << 12)
-    flagProp.arrowLight = flags & (1 << 13)
-    flagProp.arrowUnk1 = flags & (1 << 14)
-    flagProp.arrowUnk2 = flags & (1 << 15)
-    flagProp.arrowUnk3 = flags & (1 << 16)
-    flagProp.magicFire = flags & (1 << 17)
-    flagProp.magicIce = flags & (1 << 18)
-    flagProp.magicLight = flags & (1 << 19)
-    flagProp.shield = flags & (1 << 20)
-    flagProp.mirrorRay = flags & (1 << 21)
-    flagProp.spinKokiriSword = flags & (1 << 22)
-    flagProp.spinGiantSword = flags & (1 << 23)
-    flagProp.spinMasterSword = flags & (1 << 24)
-    flagProp.jumpKokiriSword = flags & (1 << 25)
-    flagProp.jumpGiantSword = flags & (1 << 26)
-    flagProp.jumpMasterSword = flags & (1 << 27)
-    flagProp.unknown1 = flags & (1 << 28)
-    flagProp.unblockable = flags & (1 << 29)
-    flagProp.hammerJump = flags & (1 << 30)
-    flagProp.unknown2 = flags & (1 << 31)
+    flagProp.dekuNut = flags & (1 << 0) != 0
+    flagProp.dekuStick = flags & (1 << 1) != 0
+    flagProp.slingshot = flags & (1 << 2) != 0
+    flagProp.explosive = flags & (1 << 3) != 0
+    flagProp.boomerang = flags & (1 << 4) != 0
+    flagProp.arrowNormal = flags & (1 << 5) != 0
+    flagProp.hammerSwing = flags & (1 << 6) != 0
+    flagProp.hookshot = flags & (1 << 7) != 0
+    flagProp.slashKokiriSword = flags & (1 << 8) != 0
+    flagProp.slashMasterSword = flags & (1 << 9) != 0
+    flagProp.slashGiantSword = flags & (1 << 10) != 0
+    flagProp.arrowFire = flags & (1 << 11) != 0
+    flagProp.arrowIce = flags & (1 << 12) != 0
+    flagProp.arrowLight = flags & (1 << 13) != 0
+    flagProp.arrowUnk1 = flags & (1 << 14) != 0
+    flagProp.arrowUnk2 = flags & (1 << 15) != 0
+    flagProp.arrowUnk3 = flags & (1 << 16) != 0
+    flagProp.magicFire = flags & (1 << 17) != 0
+    flagProp.magicIce = flags & (1 << 18) != 0
+    flagProp.magicLight = flags & (1 << 19) != 0
+    flagProp.shield = flags & (1 << 20) != 0
+    flagProp.mirrorRay = flags & (1 << 21) != 0
+    flagProp.spinKokiriSword = flags & (1 << 22) != 0
+    flagProp.spinGiantSword = flags & (1 << 23) != 0
+    flagProp.spinMasterSword = flags & (1 << 24) != 0
+    flagProp.jumpKokiriSword = flags & (1 << 25) != 0
+    flagProp.jumpGiantSword = flags & (1 << 26) != 0
+    flagProp.jumpMasterSword = flags & (1 << 27) != 0
+    flagProp.unknown1 = flags & (1 << 28) != 0
+    flagProp.unblockable = flags & (1 << 29) != 0
+    flagProp.hammerJump = flags & (1 << 30) != 0
+    flagProp.unknown2 = flags & (1 << 31) != 0
 
 
-def parseTouch(match: re.Match, touch: OOTColliderHitboxItemProperty):
-    dmgFlags = int(match.group(9).strip(), 16)
+def parseTouch(dataList: list[str], touch: OOTColliderHitboxItemProperty):
+    dmgFlags = int(dataList[7].strip(), 16)
     parseDamageFlags(dmgFlags, touch.damageFlags)
-    touch.effect = hexOrDecInt(match.group(10))
-    touch.damage = hexOrDecInt(match.group(11))
+    touch.effect = hexOrDecInt(dataList[8])
+    touch.damage = hexOrDecInt(dataList[9])
 
-    flags = [flag.strip() for flag in match.group(15).split("|")]
+    flags = [flag.strip() for flag in dataList[13].split("|")]
     touch.enable = "TOUCH_ON" in flags
 
     for flag in flags:
@@ -159,13 +159,13 @@ def parseTouch(match: re.Match, touch: OOTColliderHitboxItemProperty):
     touch.drawHitmarksForEveryCollision = "TOUCH_AT_HITMARK" in flags
 
 
-def parseBump(match: re.Match, bump: OOTColliderHurtboxItemProperty):
-    dmgFlags = int(match.group(9).strip(), 12)
+def parseBump(dataList: list[str], bump: OOTColliderHurtboxItemProperty):
+    dmgFlags = int(dataList[10].strip(), 16)
     parseDamageFlags(dmgFlags, bump.damageFlags)
-    bump.effect = hexOrDecInt(match.group(13))
-    bump.defense = hexOrDecInt(match.group(14))
+    bump.effect = hexOrDecInt(dataList[11])
+    bump.defense = hexOrDecInt(dataList[12])
 
-    flags = [flag.strip() for flag in match.group(16).split("|")]
+    flags = [flag.strip() for flag in dataList[14].split("|")]
     bump.enable = "BUMP_ON" in flags
     bump.hookable = "BUMP_HOOKABLE" in flags
     bump.giveInfoToHit = "BUMP_NO_AT_INFO" in flags
@@ -174,17 +174,17 @@ def parseBump(match: re.Match, bump: OOTColliderHurtboxItemProperty):
     bump.hasHitmark = "BUMP_NO_HITMARK" not in flags
 
 
-def parseObjectElement(match: re.Match, objectElem: OOTColliderPhysicsItemProperty):
-    flags = [flag.strip() for flag in match.group(17).split("|")]
+def parseObjectElement(dataList: list[str], objectElem: OOTColliderPhysicsItemProperty):
+    flags = [flag.strip() for flag in dataList[15].split("|")]
     objectElem.enable = "OCELEM_ON" in flags
     objectElem.toggleUnk3 = "OCELEM_UNK3" in flags
 
 
-def parseColliderInfoInit(match: re.Match, colliderItemProp: OOTActorColliderItemProperty):
-    colliderItemProp.element = getEnumValue(match.group(8).strip(), ootEnumColliderElement)
-    parseTouch(match, colliderItemProp.touch)
-    parseBump(match, colliderItemProp.bump)
-    parseObjectElement(match, colliderItemProp.objectElem)
+def parseColliderInfoInit(dataList: list[str], colliderItemProp: OOTActorColliderItemProperty):
+    colliderItemProp.element = getEnumValue(dataList[6], ootEnumColliderElement)
+    parseTouch(dataList, colliderItemProp.touch)
+    parseBump(dataList, colliderItemProp.bump)
+    parseObjectElement(dataList, colliderItemProp.objectElem)
 
 
 def parseColliderData(basePath: str, overlayName: str, isLink: bool, parentObj: bpy.types.Object):
@@ -209,28 +209,27 @@ def parseCylinderColliders(data: str, parentObj: bpy.types.Object):
         name = cylinderMatch.group(2)
         colliderData = cylinderMatch.group(3)
 
-        # regex match exact struct structure
-        regex = (
-            colliderInitRegex()  # 7 groups
-            + colliderInfoInitRegex()  # 10 groups
-            + r"\{\s*"
-            + flagListRegex(3)
-            + r"\{\s*"
-            + flagListRegex(3)
-            + r"\}\s*\}"
-        )
-
-        print(colliderData)
-        print(regex)
-
-        dataMatch = re.search(
-            regex,
-            colliderData,
-            flags=re.DOTALL,
-        )
-        if dataMatch is None:
+        dataList = [
+            item.strip() for item in colliderData.replace("{", "").replace("}", "").split(",") if item.strip() != ""
+        ]
+        if len(dataList) < 16 + 6:
             raise PluginError(f"Collider {name} has unexpected struct format.")
 
         obj = addColliderThenParent("COLSHAPE_CYLINDER", parentObj, None)
-        parseColliderInit(dataMatch, obj.ootActorCollider)
-        parseColliderInfoInit(dataMatch, obj.ootActorColliderItem)
+        parseColliderInit(dataList, obj.ootActorCollider)
+        parseColliderInfoInit(dataList, obj.ootActorColliderItem)
+
+        obj.name = toAlnum(name)
+
+        radius = hexOrDecInt(dataList[16])
+        height = hexOrDecInt(dataList[17])
+        yShift = hexOrDecInt(dataList[18])
+        position = [hexOrDecInt(value) for value in dataList[19:22]]
+
+        obj.scale.x = radius / bpy.context.scene.ootBlenderScale
+        obj.scale.y = radius / bpy.context.scene.ootBlenderScale
+        obj.scale.z = (height / bpy.context.scene.ootBlenderScale) / 2
+
+        yUpToZUp = mathutils.Quaternion((1, 0, 0), math.radians(90.0))
+        location = mathutils.Vector((0, yShift, 0)) + mathutils.Vector(position)
+        obj.location = yUpToZUp @ location

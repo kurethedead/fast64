@@ -410,8 +410,6 @@ class OOT_AddActorCollider(bpy.types.Operator):
     shape: bpy.props.EnumProperty(items=ootEnumColliderShape)
 
     def execute(self, context):
-        link_oot_collider_library()
-
         try:
             activeObj = bpy.context.view_layer.objects.active
             selectedObjs = bpy.context.selected_objects
@@ -505,6 +503,7 @@ def addColliderThenParent(shapeName: str, obj: bpy.types.Object, bone: bpy.types
 
 
 def addCollider(shapeName: str) -> bpy.types.Object:
+    link_oot_collider_library()
     if bpy.context.mode != "OBJECT":
         bpy.ops.object.mode_set(mode="OBJECT")
         bpy.ops.object.select_all(action="DESELECT")
