@@ -21,6 +21,8 @@ from .oot_utility import getOrderedBoneList, getOOTScale
 
 class OOTActorColliderImportExportSettings(bpy.types.PropertyGroup):
     enable: bpy.props.BoolProperty(name="Actor Colliders", default=False)
+    chooseSpecific: bpy.props.BoolProperty(name="Import Specific Colliders")
+    specificColliders: bpy.props.StringProperty(name="Colliders (Comma Separated List)")
     jointSphere: bpy.props.BoolProperty(name="Joint Sphere", default=True)
     cylinder: bpy.props.BoolProperty(name="Cylinder", default=True)
     mesh: bpy.props.BoolProperty(name="Mesh", default=True)
@@ -30,6 +32,9 @@ class OOTActorColliderImportExportSettings(bpy.types.PropertyGroup):
         col = layout.column()
         col.prop(self, "enable", text=title)
         if self.enable:
+            col.prop(self, "chooseSpecific")
+            if self.chooseSpecific:
+                col.prop(self, "specificColliders")
             row = col.row(align=True)
             row.prop(self, "jointSphere", text="Joint Sphere", toggle=1)
             row.prop(self, "cylinder", text="Cylinder", toggle=1)
@@ -226,11 +231,17 @@ def parseColliderData(
         currentPaths = [os.path.join(basePath, f"src/code/z_player_lib.c")]
     actorData = ootGetIncludedAssetData(basePath, currentPaths, actorData) + actorData
 
-    filterNameFunc = noFilter
-    if overlayName == "ovl_Boss_Sst":
-        filterNameFunc = filterForSst
-    elif overlayName == "ovl_Boss_Va":
-        filterNameFunc = filterForVa
+    if colliderSettings.chooseSpecific:
+        filterNameFunc = lambda geometryName, name: name in [
+            value.strip() for value in colliderSettings.specificColliders.split(",") if value.strip() != ""
+        ]
+
+    else:
+        filterNameFunc = noFilter
+        if overlayName == "ovl_Boss_Sst":
+            filterNameFunc = filterForSst
+        elif overlayName == "ovl_Boss_Va":
+            filterNameFunc = filterForVa
 
     if colliderSettings.cylinder:
         parseCylinderColliders(actorData, parentObj, geometryName, filterNameFunc)
@@ -274,7 +285,7 @@ def filterForVa(geometryName: str, colliderName: str):
 
 
 def parseCylinderColliders(
-    data: str, parentObj: bpy.types.Object, geometryName: str | None, filterNameFunc: Callable[[str], bool]
+    data: str, parentObj: bpy.types.Object, geometryName: str | None, filterNameFunc: Callable[[str, str], bool]
 ):
     handledColliders = []
     for match in re.finditer(
@@ -305,6 +316,7 @@ def parseCylinderColliders(
         parseColliderInfoInit(dataList, obj.ootActorColliderItem, 6)
 
         obj.name = f"Collider {name}"
+        obj.ootActorCollider.name = name
 
         radius = hexOrDecInt(dataList[16]) / bpy.context.scene.ootBlenderScale
         height = hexOrDecInt(dataList[17]) / bpy.context.scene.ootBlenderScale
@@ -321,7 +333,7 @@ def parseCylinderColliders(
 
 
 def parseJointSphereColliders(
-    data: str, parentObj: bpy.types.Object, geometryName: str | None, filterNameFunc: Callable[[str], bool]
+    data: str, parentObj: bpy.types.Object, geometryName: str | None, filterNameFunc: Callable[[str, str], bool]
 ):
     handledColliders = []
     if not isinstance(parentObj.data, bpy.types.Armature):
@@ -349,6 +361,8 @@ def parseJointSphereColliders(
             raise PluginError(f"Collider {name} has unexpected struct format.")
 
         itemsName = dataList[7]
+
+        parentObj.ootActorCollider.name = name
 
         parseColliderInit(dataList, parentObj.ootActorCollider)
         parseJointSphereCollidersItems(data, parentObj, itemsName, name)
@@ -403,7 +417,7 @@ def parseJointSphereCollidersItems(data: str, parentObj: bpy.types.Object, items
 
 
 def parseMeshColliders(
-    data: str, parentObj: bpy.types.Object, geometryName: str | None, filterNameFunc: Callable[[str], bool]
+    data: str, parentObj: bpy.types.Object, geometryName: str | None, filterNameFunc: Callable[[str, str], bool]
 ):
     handledColliders = []
     for match in re.finditer(
@@ -431,6 +445,8 @@ def parseMeshColliders(
         itemsName = dataList[7]
 
         obj = addColliderThenParent("COLSHAPE_TRIS", parentObj, None)
+        obj.name = f"Collider {name}"
+        obj.ootActorCollider.name = name
         parseColliderInit(dataList, obj.ootActorCollider)
         parseMeshCollidersItems(data, obj, itemsName, name)
 
@@ -486,7 +502,7 @@ def parseMeshCollidersItems(data: str, obj: bpy.types.Object, itemsName: str, na
 
 
 def parseQuadColliders(
-    data: str, parentObj: bpy.types.Object, geometryName: str | None, filterNameFunc: Callable[[str], bool]
+    data: str, parentObj: bpy.types.Object, geometryName: str | None, filterNameFunc: Callable[[str, str], bool]
 ):
     handledColliders = []
     for match in re.finditer(
@@ -516,3 +532,4 @@ def parseQuadColliders(
         parseColliderInfoInit(dataList, obj.ootActorColliderItem, 6)
 
         obj.name = f"Collider {name}"
+        obj.ootActorCollider.name = name

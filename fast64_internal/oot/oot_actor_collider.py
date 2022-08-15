@@ -309,8 +309,10 @@ class OOTActorColliderProperty(bpy.types.PropertyGroup):
     hitbox: bpy.props.PointerProperty(type=OOTColliderHitboxProperty, name="Hitbox (AT)")
     hurtbox: bpy.props.PointerProperty(type=OOTColliderHurtboxProperty, name="Hurtbox (AC)")
     physics: bpy.props.PointerProperty(type=OOTColliderPhysicsProperty, name="Physics (OC)")
+    name: bpy.props.StringProperty(name="Struct Name", default="sColliderInit")
 
     def draw(self, obj: bpy.types.Object, layout: bpy.types.UILayout):
+        prop_split(layout, self, "name", "Struct Name")
         if obj.ootActorCollider.colliderShape == "COLSHAPE_JNTSPH":
             armatureObj = obj.parent
             if obj.parent is not None and isinstance(obj.parent.data, bpy.types.Armature) and obj.parent_bone != "":
