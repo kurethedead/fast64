@@ -66,8 +66,12 @@ def ootGetActorData(basePath: str, overlayName: str) -> str:
 
 
 def ootGetLinkData(basePath: str) -> str:
-    linkFilePath = os.path.join(basePath, f"src/code/z_player_lib.c")
-    actorData = getImportData([linkFilePath])
+    actorData = getImportData(
+        [
+            os.path.join(basePath, f"src/code/z_player_lib.c"),
+            os.path.join(basePath, f"src/overlays/actors/ovl_player_actor/z_player.c"),
+        ]
+    )
 
     return actorData
 

@@ -323,13 +323,11 @@ def parseCylinderColliders(
         yShift = hexOrDecInt(dataList[18]) / bpy.context.scene.ootBlenderScale
         position = [hexOrDecInt(value) / bpy.context.scene.ootBlenderScale for value in dataList[19:22]]
 
-        obj.scale.x = radius
-        obj.scale.y = radius
-        obj.scale.z = height / 2
-
         yUpToZUp = mathutils.Quaternion((1, 0, 0), math.radians(90.0))
         location = mathutils.Vector((0, yShift, 0)) + mathutils.Vector(position)
-        obj.location = yUpToZUp @ location
+        obj.matrix_local = mathutils.Matrix.Diagonal(
+            mathutils.Vector((radius, radius, height / 2, 1))
+        ) @ mathutils.Matrix.Translation(yUpToZUp @ location)
 
 
 def parseJointSphereColliders(
