@@ -15,7 +15,7 @@ from .oot_actor_collider import (
     OOTDamageFlagsProperty,
     addColliderThenParent,
 )
-from .oot_utility import getOrderedBoneList
+from .oot_utility import getOrderedBoneList, getOOTScale
 
 # has 1 capture group
 def flagRegex(commaTerminating: bool = True) -> str:
@@ -292,7 +292,7 @@ def parseJointSphereCollidersItems(data: str, parentObj: bpy.types.Object, items
         limb = hexOrDecInt(item[10]) - 1
 
         location = mathutils.Vector(
-            [hexOrDecInt(value) / bpy.context.scene.ootActorBlenderScale for value in item[11:14]]
+            [hexOrDecInt(value) / (getOOTScale(parentObj.ootActorScale)) for value in item[11:14]]
         )
         radius = hexOrDecInt(item[14]) / bpy.context.scene.ootBlenderScale
         scale = hexOrDecInt(item[15]) / 100
