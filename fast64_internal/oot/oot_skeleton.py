@@ -46,11 +46,10 @@ class OOTSkeletonImportSettings(bpy.types.PropertyGroup):
     arrayIndex2D: bpy.props.IntProperty(name="Index if 2D Array", default=0, min=0)
     customPath: bpy.props.StringProperty(name="Custom Skeleton Path", subtype="FILE_PATH")
     useCustomPath: bpy.props.BoolProperty(name="Use Custom Path")
-    includeColliders: bpy.props.BoolProperty(name="Include Actor Colliders", default=False)
-
     removeDoubles: bpy.props.BoolProperty(name="Remove Doubles On Import", default=True)
     importNormals: bpy.props.BoolProperty(name="Import Normals", default=True)
     drawLayer: bpy.props.EnumProperty(name="Import Draw Layer", items=ootEnumDrawLayers)
+    handleColliders: bpy.props.PointerProperty(type=OOTActorColliderImportExportSettings)
 
 
 class OOTSkeletonExportSettings(bpy.types.PropertyGroup):
@@ -62,7 +61,7 @@ class OOTSkeletonExportSettings(bpy.types.PropertyGroup):
     arrayIndex2D: bpy.props.IntProperty(name="Index if 2D Array", default=0, min=0)
     customPath: bpy.props.StringProperty(name="Custom Skeleton Path", subtype="FILE_PATH")
     useCustomPath: bpy.props.BoolProperty(name="Use Custom Path")
-    includeColliders: bpy.props.BoolProperty(name="Include Actor Colliders", default=False)
+    handleColliders: bpy.props.PointerProperty(type=OOTActorColliderImportExportSettings)
     removeVanillaData: bpy.props.BoolProperty(name="Replace Vanilla Headers On Export", default=True)
     optimize: bpy.props.BoolProperty(
         name="Optimize",
@@ -1090,8 +1089,8 @@ class OOT_ExportSkeletonPanel(OOT_Panel):
                     elif settings.arrayIndex2D == 1:
                         box.label(text="Child Link", icon="OPTIONS")
                     box.label(text="Requires enabling NON_MATCHING in Makefile.", icon="ERROR")
+        settings.handleColliders.draw(col, "Export Actor Colliders")
         col.prop(settings, "useCustomPath")
-        col.prop(settings, "includeColliders")
         col.prop(settings, "removeVanillaData")
         col.prop(settings, "optimize")
         if settings.optimize:
@@ -1109,6 +1108,7 @@ class OOT_ExportSkeletonPanel(OOT_Panel):
             prop_split(col, settings, "folderName", "Object")
             if not settings.isLink:
                 prop_split(col, settings, "overlay", "Overlay")
+            settings.handleColliders.draw(col, "Import Actor Colliders")
             col.prop(settings, "isLink")
             if not settings.isLink:
                 col.prop(settings, "is2DArray")
@@ -1130,7 +1130,6 @@ class OOT_ExportSkeletonPanel(OOT_Panel):
                     text="This actor has a 2D texture array and will not import correctly unless the array is flattened.",
                     icon="ERROR",
                 )
-            col.prop(settings, "includeColliders")
 
         prop_split(col, settings, "drawLayer", "Import Draw Layer")
 

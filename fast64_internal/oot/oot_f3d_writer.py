@@ -19,6 +19,24 @@ ootEnumGeometryType = [
 ]
 
 
+class OOTActorColliderImportExportSettings(bpy.types.PropertyGroup):
+    enable: bpy.props.BoolProperty(name="Actor Colliders", default=False)
+    jointSphere: bpy.props.BoolProperty(name="Joint Sphere", default=True)
+    cylinder: bpy.props.BoolProperty(name="Cylinder", default=True)
+    mesh: bpy.props.BoolProperty(name="Mesh", default=True)
+    quad: bpy.props.BoolProperty(name="Quad", default=True)
+
+    def draw(self, layout: bpy.types.UILayout, title: str):
+        col = layout.column()
+        col.prop(self, "enable", text=title)
+        if self.enable:
+            row = col.row(align=True)
+            row.prop(self, "jointSphere", text="Joint Sphere", toggle=1)
+            row.prop(self, "cylinder", text="Cylinder", toggle=1)
+            row.prop(self, "mesh", text="Mesh", toggle=1)
+            row.prop(self, "quad", text="Quad", toggle=1)
+
+
 class OOTDLExportSettings(bpy.types.PropertyGroup):
     name: bpy.props.StringProperty(name="DL Name", default="gBoulderFragmentsDL")
     folderName: bpy.props.StringProperty(name="DL Folder", default="gameplay_keep")
@@ -29,6 +47,7 @@ class OOTDLExportSettings(bpy.types.PropertyGroup):
     useCustomPath: bpy.props.BoolProperty(name="Use Custom Path")
     removeVanillaData: bpy.props.BoolProperty(name="Replace Vanilla DLs")
     drawLayer: bpy.props.EnumProperty(name="Draw Layer", items=ootEnumDrawLayers)
+    handleColliders: bpy.props.PointerProperty(type=OOTActorColliderImportExportSettings)
 
 
 class OOTDLImportSettings(bpy.types.PropertyGroup):
@@ -39,10 +58,10 @@ class OOTDLImportSettings(bpy.types.PropertyGroup):
     arrayIndex2D: bpy.props.IntProperty(name="Index if 2D Array", default=0, min=0)
     customPath: bpy.props.StringProperty(name="Custom DL Path", subtype="FILE_PATH")
     useCustomPath: bpy.props.BoolProperty(name="Use Custom Path")
-
     removeDoubles: bpy.props.BoolProperty(name="Remove Doubles", default=True)
     importNormals: bpy.props.BoolProperty(name="Import Normals", default=True)
     drawLayer: bpy.props.EnumProperty(name="Draw Layer", items=ootEnumDrawLayers)
+    handleColliders: bpy.props.PointerProperty(type=OOTActorColliderImportExportSettings)
 
 
 # returns:
@@ -542,6 +561,7 @@ class OOT_ExportDLPanel(OOT_Panel):
             if settings.is2DArray:
                 box = col.box().column()
                 prop_split(box, settings, "arrayIndex2D", "Flipbook Index")
+        settings.handleColliders.draw(col, "Export Actor Colliders")
         prop_split(col, settings, "drawLayer", "Export Draw Layer")
         col.prop(settings, "useCustomPath")
         col.prop(settings, "removeVanillaData")
@@ -559,6 +579,7 @@ class OOT_ExportDLPanel(OOT_Panel):
             if settings.is2DArray:
                 box = col.box().column()
                 prop_split(box, settings, "arrayIndex2D", "Flipbook Index")
+            settings.handleColliders.draw(col, "Import Actor Colliders")
         prop_split(col, settings, "drawLayer", "Import Draw Layer")
 
         col.prop(settings, "useCustomPath")
@@ -698,6 +719,7 @@ class OOTDynamicMaterialProperty(bpy.types.PropertyGroup):
 
 
 oot_dl_writer_classes = (
+    OOTActorColliderImportExportSettings,
     OOTDefaultRenderModesProperty,
     OOTDynamicMaterialDrawLayerProperty,
     OOTDynamicMaterialProperty,
