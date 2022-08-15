@@ -15,6 +15,7 @@ from .oot_actor_collider import (
     OOTDamageFlagsProperty,
     addColliderThenParent,
 )
+from .oot_utility import getOrderedBoneList
 
 # has 1 capture group
 def flagRegex(commaTerminating: bool = True) -> str:
@@ -143,13 +144,13 @@ def parseDamageFlags(flags: int, flagProp: OOTDamageFlagsProperty):
     flagProp.unknown2 = flags & (1 << 31) != 0
 
 
-def parseTouch(dataList: list[str], touch: OOTColliderHitboxItemProperty):
-    dmgFlags = int(dataList[7].strip(), 16)
+def parseTouch(dataList: list[str], touch: OOTColliderHitboxItemProperty, startIndex: int):
+    dmgFlags = int(dataList[startIndex + 1].strip(), 16)
     parseDamageFlags(dmgFlags, touch.damageFlags)
-    touch.effect = hexOrDecInt(dataList[8])
-    touch.damage = hexOrDecInt(dataList[9])
+    touch.effect = hexOrDecInt(dataList[startIndex + 2])
+    touch.damage = hexOrDecInt(dataList[startIndex + 3])
 
-    flags = [flag.strip() for flag in dataList[13].split("|")]
+    flags = [flag.strip() for flag in dataList[startIndex + 7].split("|")]
     touch.enable = "TOUCH_ON" in flags
 
     for flag in flags:
@@ -159,13 +160,13 @@ def parseTouch(dataList: list[str], touch: OOTColliderHitboxItemProperty):
     touch.drawHitmarksForEveryCollision = "TOUCH_AT_HITMARK" in flags
 
 
-def parseBump(dataList: list[str], bump: OOTColliderHurtboxItemProperty):
-    dmgFlags = int(dataList[10].strip(), 16)
+def parseBump(dataList: list[str], bump: OOTColliderHurtboxItemProperty, startIndex: int):
+    dmgFlags = int(dataList[startIndex + 4].strip(), 16)
     parseDamageFlags(dmgFlags, bump.damageFlags)
-    bump.effect = hexOrDecInt(dataList[11])
-    bump.defense = hexOrDecInt(dataList[12])
+    bump.effect = hexOrDecInt(dataList[startIndex + 5])
+    bump.defense = hexOrDecInt(dataList[startIndex + 6])
 
-    flags = [flag.strip() for flag in dataList[14].split("|")]
+    flags = [flag.strip() for flag in dataList[startIndex + 8].split("|")]
     bump.enable = "BUMP_ON" in flags
     bump.hookable = "BUMP_HOOKABLE" in flags
     bump.giveInfoToHit = "BUMP_NO_AT_INFO" in flags
@@ -174,17 +175,17 @@ def parseBump(dataList: list[str], bump: OOTColliderHurtboxItemProperty):
     bump.hasHitmark = "BUMP_NO_HITMARK" not in flags
 
 
-def parseObjectElement(dataList: list[str], objectElem: OOTColliderPhysicsItemProperty):
-    flags = [flag.strip() for flag in dataList[15].split("|")]
+def parseObjectElement(dataList: list[str], objectElem: OOTColliderPhysicsItemProperty, startIndex: int):
+    flags = [flag.strip() for flag in dataList[startIndex + 9].split("|")]
     objectElem.enable = "OCELEM_ON" in flags
     objectElem.toggleUnk3 = "OCELEM_UNK3" in flags
 
 
-def parseColliderInfoInit(dataList: list[str], colliderItemProp: OOTActorColliderItemProperty):
-    colliderItemProp.element = getEnumValue(dataList[6], ootEnumColliderElement)
-    parseTouch(dataList, colliderItemProp.touch)
-    parseBump(dataList, colliderItemProp.bump)
-    parseObjectElement(dataList, colliderItemProp.objectElem)
+def parseColliderInfoInit(dataList: list[str], colliderItemProp: OOTActorColliderItemProperty, startIndex: int):
+    colliderItemProp.element = getEnumValue(dataList[startIndex], ootEnumColliderElement)
+    parseTouch(dataList, colliderItemProp.touch, startIndex)
+    parseBump(dataList, colliderItemProp.bump, startIndex)
+    parseObjectElement(dataList, colliderItemProp.objectElem, startIndex)
 
 
 def parseColliderData(basePath: str, overlayName: str, isLink: bool, parentObj: bpy.types.Object):
@@ -197,17 +198,18 @@ def parseColliderData(basePath: str, overlayName: str, isLink: bool, parentObj: 
     actorData = ootGetIncludedAssetData(basePath, currentPaths, actorData) + actorData
 
     parseCylinderColliders(actorData, parentObj)
+    parseJointSphereColliders(actorData, parentObj)
 
 
 def parseCylinderColliders(data: str, parentObj: bpy.types.Object):
-    for cylinderMatch in re.finditer(
+    for match in re.finditer(
         r"ColliderCylinderInit(Type1)?\s*([0-9a-zA-Z\_]*)\s*=\s*\{(.*?)\}\s*;",
         data,
         flags=re.DOTALL,
     ):
-        isType1 = cylinderMatch.group(1) is not None
-        name = cylinderMatch.group(2)
-        colliderData = cylinderMatch.group(3)
+        isType1 = match.group(1) is not None
+        name = match.group(2)
+        colliderData = match.group(3)
 
         dataList = [
             item.strip() for item in colliderData.replace("{", "").replace("}", "").split(",") if item.strip() != ""
@@ -217,19 +219,94 @@ def parseCylinderColliders(data: str, parentObj: bpy.types.Object):
 
         obj = addColliderThenParent("COLSHAPE_CYLINDER", parentObj, None)
         parseColliderInit(dataList, obj.ootActorCollider)
-        parseColliderInfoInit(dataList, obj.ootActorColliderItem)
+        parseColliderInfoInit(dataList, obj.ootActorColliderItem, 6)
+        obj.ootActorColliderItem.owningStruct = name
 
-        obj.name = toAlnum(name)
+        obj.ootActorCollider.name = name
+        obj.name = f"Collider {name}"
 
-        radius = hexOrDecInt(dataList[16])
-        height = hexOrDecInt(dataList[17])
-        yShift = hexOrDecInt(dataList[18])
-        position = [hexOrDecInt(value) for value in dataList[19:22]]
+        radius = hexOrDecInt(dataList[16]) / bpy.context.scene.ootBlenderScale
+        height = hexOrDecInt(dataList[17]) / bpy.context.scene.ootBlenderScale
+        yShift = hexOrDecInt(dataList[18]) / bpy.context.scene.ootBlenderScale
+        position = [hexOrDecInt(value) / bpy.context.scene.ootBlenderScale for value in dataList[19:22]]
 
-        obj.scale.x = radius / bpy.context.scene.ootBlenderScale
-        obj.scale.y = radius / bpy.context.scene.ootBlenderScale
-        obj.scale.z = (height / bpy.context.scene.ootBlenderScale) / 2
+        obj.scale.x = radius
+        obj.scale.y = radius
+        obj.scale.z = height / 2
 
         yUpToZUp = mathutils.Quaternion((1, 0, 0), math.radians(90.0))
         location = mathutils.Vector((0, yShift, 0)) + mathutils.Vector(position)
         obj.location = yUpToZUp @ location
+
+
+def parseJointSphereColliders(data: str, parentObj: bpy.types.Object):
+    if not isinstance(parentObj.data, bpy.types.Armature):
+        raise PluginError("Joint spheres can only be added to armature objects.")
+    for match in re.finditer(
+        r"ColliderJntSphInit\s*([0-9a-zA-Z\_]*)\s*=\s*\{(.*?)\}\s*;",
+        data,
+        flags=re.DOTALL,
+    ):
+        name = match.group(1)
+        colliderData = match.group(2)
+
+        dataList = [
+            item.strip() for item in colliderData.replace("{", "").replace("}", "").split(",") if item.strip() != ""
+        ]
+        if len(dataList) < 2 + 6:
+            raise PluginError(f"Collider {name} has unexpected struct format.")
+
+        itemsName = dataList[7]
+
+        parseColliderInit(dataList, parentObj.ootActorCollider)
+        parseJointSphereCollidersItems(data, parentObj, itemsName, name)
+
+
+def parseJointSphereCollidersItems(data: str, parentObj: bpy.types.Object, itemsName: str, name: str):
+    match = re.search(
+        r"ColliderJntSphElementInit\s*" + re.escape(itemsName) + r"\s*\[\s*[0-9A-Fa-fx]*\s*\]\s*=\s*\{(.*?)\}\s*;",
+        data,
+        flags=re.DOTALL,
+    )
+
+    if match is None:
+        raise PluginError(f"Could not find {itemsName}.")
+
+    matchData = match.group(1)
+
+    dataList = [item.strip() for item in matchData.replace("{", "").replace("}", "").split(",") if item.strip() != ""]
+    if len(dataList) % 16 != 0:
+        raise PluginError(f"{itemsName} has unexpected struct format.")
+
+    boneList = getOrderedBoneList(parentObj)
+    print(str([bone.name for bone in boneList]))
+
+    count = int(round(len(dataList) / 16))
+    for item in [dataList[16 * i : 16 * (i + 1)] for i in range(count)]:
+
+        # Why subtract 1???
+        # in SkelAnime_InitFlex: skelAnime->limbCount = skeletonHeader->sh.limbCount + 1;
+        # possibly?
+        # Note: works with king dodongo, not with ganon2
+        # Note: king dodongo count = numElements - 1
+        limb = hexOrDecInt(item[10]) - 1
+
+        location = mathutils.Vector(
+            [hexOrDecInt(value) / bpy.context.scene.ootActorBlenderScale for value in item[11:14]]
+        )
+        radius = hexOrDecInt(item[14]) / bpy.context.scene.ootBlenderScale
+        scale = hexOrDecInt(item[15]) / 100
+
+        obj = addColliderThenParent("COLSHAPE_JNTSPH", parentObj, boneList[limb])
+        parseColliderInfoInit(item, obj.ootActorColliderItem, 0)
+        obj.ootActorColliderItem.owningStruct = name
+
+        yUpToZUp = mathutils.Quaternion((1, 0, 0), math.radians(90.0))
+        obj.matrix_world = (
+            parentObj.matrix_world
+            @ parentObj.pose.bones[boneList[limb].name].matrix
+            @ mathutils.Matrix.Translation(location)
+        )
+        obj.scale.x = radius * scale
+        obj.scale.y = radius * scale
+        obj.scale.z = radius * scale

@@ -1576,7 +1576,7 @@ ootEnumColliderType = [
     ("COLTYPE_HIT6", "Green Blood, White Hitmark", "Green Blood, White Hitmark"),
     ("COLTYPE_HIT7", "Red Blood, White Hitmark", "Red Blood, White Hitmark"),
     ("COLTYPE_HIT8", "Blue Blood, Red Hitmark", "Blue Blood, Red Hitmark"),
-    ("COLTYPE_META", "Meta", "Meta"),
+    ("COLTYPE_METAL", "Metal", "Metal"),
     ("COLTYPE_NONE", "None", "None"),
     ("COLTYPE_WOOD", "Wood", "Wood"),
     ("COLTYPE_HARD", "Hard", "Hard"),

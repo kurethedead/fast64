@@ -388,6 +388,27 @@ def checkForStartBone(armatureObj):
     # 	raise PluginError("Skeleton must have a bone named 'root' where the skeleton starts from.")
 
 
+def getNextBone(boneStack, armatureObj):
+    if len(boneStack) == 0:
+        raise PluginError("More bones in animation than on armature.")
+    bone = armatureObj.data.bones[boneStack[0]]
+    boneStack = boneStack[1:]
+    boneStack = getSortedChildren(armatureObj, bone) + boneStack
+    return bone, boneStack
+
+
+def getOrderedBoneList(armatureObj: bpy.types.Object):
+    startBoneName = getStartBone(armatureObj)
+    boneList = []
+    boneStack = [startBoneName]
+
+    while len(boneStack) > 0:
+        bone, boneStack = getNextBone(boneStack, armatureObj)
+        boneList.append(bone)
+
+    return boneList
+
+
 class BoxEmpty:
     def __init__(self, position, scale, emptyScale):
         # The scale ordering is due to the fact that scaling happens AFTER rotation.

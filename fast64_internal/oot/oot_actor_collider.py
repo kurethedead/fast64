@@ -28,15 +28,15 @@ def updateColliderOnObj(obj: bpy.types.Object, updateJointSiblings: bool = True)
         # if colliderProp.colliderShape == "COLSHAPE_TRIS":
         #    material = getColliderMat("oot_collider_cyan", (0, 0.5, 1, 0.3))
         if colliderProp.colliderShape == "COLSHAPE_QUAD":
-            material = getColliderMat("oot_collider_orange", (0.8, 0.1, 0, 0.5))
+            material = getColliderMat("oot_collider_orange", (0.2, 0.05, 0, 0.4))
         elif queryProp.hitbox.enable and (queryProp.hurtbox.enable or queryProp.physics.enable):
-            material = getColliderMat("oot_collider_magenta", (1, 0, 1, 0.5))
+            material = getColliderMat("oot_collider_purple", (0.15, 0, 0.05, 0.4))
         elif queryProp.hitbox.enable:
-            material = getColliderMat("oot_collider_red", (1, 0, 0, 0.5))
+            material = getColliderMat("oot_collider_red", (0.2, 0, 0, 0.4))
         elif queryProp.hurtbox.enable or queryProp.physics.enable:
-            material = getColliderMat("oot_collider_blue", (0, 0, 1, 0.5))
+            material = getColliderMat("oot_collider_blue", (0, 0, 0.2, 0.4))
         else:
-            material = getColliderMat("oot_collider_white", (1, 1, 1, 0.5))
+            material = getColliderMat("oot_collider_white", (0.2, 0.2, 0.2, 0.4))
         applyColliderGeoNodes(obj, material, colliderProp.colliderShape)
 
         if updateJointSiblings and colliderProp.colliderShape == "COLSHAPE_JNTSPH" and obj.parent is not None:
@@ -338,6 +338,10 @@ class OOTActorColliderItemProperty(bpy.types.PropertyGroup):
     bump: bpy.props.PointerProperty(type=OOTColliderHurtboxItemProperty, name="Bump")
     objectElem: bpy.props.PointerProperty(type=OOTColliderPhysicsItemProperty, name="Object Element")
 
+    # Owner name defined her and not in OOTActorColliderProperty
+    # to allow for multiple joint sphere collections to be exported.
+    owningStruct: bpy.props.StringProperty(default="sColliderInit", name="Owning Struct")
+
     def draw(self, obj: bpy.types.Object | None, layout: bpy.types.UILayout):
         if obj is not None and obj.ootActorCollider.colliderShape == "COLSHAPE_JNTSPH":
             armatureObj = obj.parent
@@ -353,6 +357,7 @@ class OOTActorColliderItemProperty(bpy.types.PropertyGroup):
             layout.label(text="Materials will not be visualized.")
         else:
             layout = layout.column()
+            prop_split(layout, self, "owningStruct", "Owning Struct")
             prop_split(layout, self, "element", "Element Type")
             self.touch.draw(layout)
             self.bump.draw(layout)
@@ -556,9 +561,11 @@ def applyColliderGeoNodes(obj: bpy.types.Object, material: bpy.types.Material, s
 # Creates a semi-transparent solid color material (cached)
 def getColliderMat(name: str, color: tuple[float, float, float, float]) -> bpy.types.Material:
     if name not in bpy.data.materials:
-        newMat = createF3DMat(None, preset="oot_unlit_texture_transparent", index=0)
+        newMat = createF3DMat(None, preset="oot_shaded_texture_transparent", index=0)
         newMat.name = name
-        newMat.f3d_mat.combiner1.D = "1"
+        newMat.f3d_mat.combiner1.A = "0"
+        newMat.f3d_mat.combiner1.C = "0"
+        newMat.f3d_mat.combiner1.D = "SHADE"
         newMat.f3d_mat.combiner1.D_alpha = "1"
         newMat.f3d_mat.prim_color = color
         update_preset_manual(newMat, bpy.context)
