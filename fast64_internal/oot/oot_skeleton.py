@@ -558,7 +558,7 @@ def ootProcessBone(
     return nextIndex, lastMaterialName
 
 
-def ootConvertArmatureToC(originalArmatureObj, settings: OOTSkeletonExportSettings):
+def ootConvertArmatureToC(originalArmatureObj: bpy.types.Object, settings: OOTSkeletonExportSettings):
     convertTransformMatrix = mathutils.Matrix.Scale(getOOTScale(originalArmatureObj.ootActorScale), 4)
 
     savePNG = bpy.context.scene.saveTextures or bpy.context.scene.ignoreTextureRestrictions
