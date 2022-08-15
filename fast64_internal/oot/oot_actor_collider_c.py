@@ -222,7 +222,7 @@ def parseColliderData(
         pass
 
     if colliderSettings.quad:
-        pass
+        parseQuadColliders(actorData, parentObj, geometryName, filterNameFunc)
 
 
 def noFilter(name: str, colliderName: str):
@@ -263,7 +263,6 @@ def parseCylinderColliders(
         flags=re.DOTALL,
     ):
 
-        isType1 = match.group(1) is not None
         name = match.group(2)
         colliderData = match.group(3)
 
@@ -284,9 +283,7 @@ def parseCylinderColliders(
         obj = addColliderThenParent("COLSHAPE_CYLINDER", parentObj, None)
         parseColliderInit(dataList, obj.ootActorCollider)
         parseColliderInfoInit(dataList, obj.ootActorColliderItem, 6)
-        obj.ootActorColliderItem.owningStruct = name
 
-        obj.ootActorCollider.name = name
         obj.name = f"Collider {name}"
 
         radius = hexOrDecInt(dataList[16]) / bpy.context.scene.ootBlenderScale
@@ -373,7 +370,6 @@ def parseJointSphereCollidersItems(data: str, parentObj: bpy.types.Object, items
 
         obj = addColliderThenParent("COLSHAPE_JNTSPH", parentObj, boneList[limb])
         parseColliderInfoInit(item, obj.ootActorColliderItem, 0)
-        obj.ootActorColliderItem.owningStruct = name
 
         yUpToZUp = mathutils.Quaternion((1, 0, 0), math.radians(90.0))
         obj.matrix_world = (
@@ -384,3 +380,36 @@ def parseJointSphereCollidersItems(data: str, parentObj: bpy.types.Object, items
         obj.scale.x = radius * scale
         obj.scale.y = radius * scale
         obj.scale.z = radius * scale
+
+
+def parseQuadColliders(
+    data: str, parentObj: bpy.types.Object, geometryName: str | None, filterNameFunc: Callable[[str], bool]
+):
+    handledColliders = []
+    for match in re.finditer(
+        r"ColliderQuadInit(Type1)?\s*([0-9a-zA-Z\_]*)\s*=\s*\{(.*?)\}\s*;",
+        data,
+        flags=re.DOTALL,
+    ):
+        name = match.group(2)
+        colliderData = match.group(3)
+
+        if not filterNameFunc(geometryName, name):
+            continue
+
+        # This happens because our file including is not ideal and doesn't check for duplicate includes
+        if name in handledColliders:
+            continue
+        handledColliders.append(name)
+
+        dataList = [
+            item.strip() for item in colliderData.replace("{", "").replace("}", "").split(",") if item.strip() != ""
+        ]
+        if len(dataList) < 16 + 6:
+            raise PluginError(f"Collider {name} has unexpected struct format.")
+
+        obj = addColliderThenParent("COLSHAPE_QUAD", parentObj, None)
+        parseColliderInit(dataList, obj.ootActorCollider)
+        parseColliderInfoInit(dataList, obj.ootActorColliderItem, 6)
+
+        obj.name = f"Collider {name}"

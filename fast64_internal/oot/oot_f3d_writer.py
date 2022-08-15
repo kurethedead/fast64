@@ -34,7 +34,7 @@ class OOTActorColliderImportExportSettings(bpy.types.PropertyGroup):
             row.prop(self, "jointSphere", text="Joint Sphere", toggle=1)
             row.prop(self, "cylinder", text="Cylinder", toggle=1)
             # row.prop(self, "mesh", text="Mesh", toggle=1)
-            # row.prop(self, "quad", text="Quad", toggle=1)
+            row.prop(self, "quad", text="Quad", toggle=1)
 
         return col
 

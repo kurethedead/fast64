@@ -529,7 +529,7 @@ def addCollider(shapeName: str) -> bpy.types.Object:
     if shapeName == "COLSHAPE_CYLINDER":
         planeObj.lock_location = (True, True, False)
         planeObj.lock_rotation = (True, True, True)
-    elif shapeName == "COLSHAPE_TRIS" or shapeName == "COLSHAPE_QUAD":
+    elif shapeName == "COLSHAPE_TRIS":
         planeObj.lock_location = (True, True, True)
         planeObj.lock_rotation = (True, True, True)
 
