@@ -25,18 +25,19 @@ def updateColliderOnObj(obj: bpy.types.Object, updateJointSiblings: bool = True)
         else:
             queryProp = colliderProp
 
+        alpha = 0.7
         # if colliderProp.colliderShape == "COLSHAPE_TRIS":
-        #    material = getColliderMat("oot_collider_cyan", (0, 0.5, 1, 0.3))
+        #    material = getColliderMat("oot_collider_cyan", (0, 0.5, 1, alpha))
         if colliderProp.colliderShape == "COLSHAPE_QUAD":
-            material = getColliderMat("oot_collider_orange", (0.2, 0.05, 0, 0.4))
+            material = getColliderMat("oot_collider_orange", (0.2, 0.05, 0, alpha))
         elif queryProp.hitbox.enable and queryProp.hurtbox.enable:
-            material = getColliderMat("oot_collider_purple", (0.15, 0, 0.05, 0.4))
+            material = getColliderMat("oot_collider_purple", (0.15, 0, 0.05, alpha))
         elif queryProp.hitbox.enable:
-            material = getColliderMat("oot_collider_red", (0.2, 0, 0, 0.4))
+            material = getColliderMat("oot_collider_red", (0.2, 0, 0, alpha))
         elif queryProp.hurtbox.enable:
-            material = getColliderMat("oot_collider_blue", (0, 0, 0.2, 0.4))
+            material = getColliderMat("oot_collider_blue", (0, 0, 0.2, alpha))
         else:
-            material = getColliderMat("oot_collider_white", (0.2, 0.2, 0.2, 0.4))
+            material = getColliderMat("oot_collider_white", (0.2, 0.2, 0.2, alpha))
         applyColliderGeoNodes(obj, material, colliderProp.colliderShape)
 
         if updateJointSiblings and colliderProp.colliderShape == "COLSHAPE_JNTSPH" and obj.parent is not None:
