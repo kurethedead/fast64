@@ -305,7 +305,7 @@ def ootSelectMeshChildrenOnly(obj, includeEmpties):
     isEmpty = (
         obj.data is None or isinstance(obj.data, bpy.types.Camera) or isinstance(obj.data, bpy.types.Curve)
     ) and includeEmpties
-    if isMesh or isEmpty:
+    if (isMesh or isEmpty) and not obj.ootGeometryType == "Actor Collider":
         obj.select_set(True)
         obj.original_name = obj.name
     for child in obj.children:

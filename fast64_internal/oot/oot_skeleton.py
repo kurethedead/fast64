@@ -297,7 +297,11 @@ def ootDuplicateArmatureAndRemoveRotations(originalArmatureObj: bpy.types.Object
     # Duplicate objects to apply scale / modifiers / linked data
     bpy.ops.object.select_all(action="DESELECT")
 
-    for originalMeshObj in [obj for obj in originalArmatureObj.children if isinstance(obj.data, bpy.types.Mesh)]:
+    for originalMeshObj in [
+        obj
+        for obj in originalArmatureObj.children
+        if isinstance(obj.data, bpy.types.Mesh) and obj.ootGeometryType != "Actor Collider"
+    ]:
         originalMeshObj.select_set(True)
         originalMeshObj.original_name = originalMeshObj.name
 
