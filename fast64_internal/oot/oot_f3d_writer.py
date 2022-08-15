@@ -12,31 +12,12 @@ from ..panels import OOT_Panel
 from .oot_model_classes import *
 from .oot_scene_room import *
 from .oot_texture_array import *
+from .oot_actor_collider_c import OOTActorColliderImportExportSettings, parseColliderData
 
 ootEnumGeometryType = [
     ("Regular", "Regular", "Regular"),
     ("Actor Collider", "Actor Collider", "Actor Collider"),
 ]
-
-
-class OOTActorColliderImportExportSettings(bpy.types.PropertyGroup):
-    enable: bpy.props.BoolProperty(name="Actor Colliders", default=False)
-    jointSphere: bpy.props.BoolProperty(name="Joint Sphere", default=True)
-    cylinder: bpy.props.BoolProperty(name="Cylinder", default=True)
-    mesh: bpy.props.BoolProperty(name="Mesh", default=True)
-    quad: bpy.props.BoolProperty(name="Quad", default=True)
-
-    def draw(self, layout: bpy.types.UILayout, title: str):
-        col = layout.column()
-        col.prop(self, "enable", text=title)
-        if self.enable:
-            row = col.row(align=True)
-            row.prop(self, "jointSphere", text="Joint Sphere", toggle=1)
-            row.prop(self, "cylinder", text="Cylinder", toggle=1)
-            # row.prop(self, "mesh", text="Mesh", toggle=1)
-            row.prop(self, "quad", text="Quad", toggle=1)
-
-        return col
 
 
 class OOTDLExportSettings(bpy.types.PropertyGroup):
@@ -480,7 +461,7 @@ class OOT_ImportDL(bpy.types.Operator):
             data = getImportData(paths)
             f3dContext = OOTF3DContext(F3D("F3DEX2/LX2", False), [settings.name], basePath)
 
-            scale = settings.actorScale
+            scale = getOOTScale(settings.actorScale)
             if not settings.useCustomPath:
                 data = ootGetIncludedAssetData(basePath, paths, data) + data
 
@@ -500,6 +481,9 @@ class OOT_ImportDL(bpy.types.Operator):
                 f3dContext,
             )
             obj.ootActorScale = scale / bpy.context.scene.ootBlenderScale
+
+            if settings.handleColliders.enable:
+                parseColliderData(settings.name, basePath, settings.overlay, False, obj, settings.handleColliders)
 
             self.report({"INFO"}, "Success!")
             return {"FINISHED"}
@@ -584,7 +568,7 @@ class OOT_ExportDLPanel(OOT_Panel):
             if settings.is2DArray:
                 box = col.box().column()
                 prop_split(box, settings, "arrayIndex2D", "Flipbook Index")
-            settings.handleColliders.draw(col, "Import Actor Colliders").enabled = False
+            settings.handleColliders.draw(col, "Import Actor Colliders")
         prop_split(col, settings, "drawLayer", "Import Draw Layer")
 
         col.prop(settings, "useCustomPath")

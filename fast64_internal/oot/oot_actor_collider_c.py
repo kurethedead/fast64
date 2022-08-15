@@ -16,8 +16,28 @@ from .oot_actor_collider import (
     OOTDamageFlagsProperty,
     addColliderThenParent,
 )
-from .oot_f3d_writer import OOTActorColliderImportExportSettings
 from .oot_utility import getOrderedBoneList, getOOTScale
+
+
+class OOTActorColliderImportExportSettings(bpy.types.PropertyGroup):
+    enable: bpy.props.BoolProperty(name="Actor Colliders", default=False)
+    jointSphere: bpy.props.BoolProperty(name="Joint Sphere", default=True)
+    cylinder: bpy.props.BoolProperty(name="Cylinder", default=True)
+    mesh: bpy.props.BoolProperty(name="Mesh", default=True)
+    quad: bpy.props.BoolProperty(name="Quad", default=True)
+
+    def draw(self, layout: bpy.types.UILayout, title: str):
+        col = layout.column()
+        col.prop(self, "enable", text=title)
+        if self.enable:
+            row = col.row(align=True)
+            row.prop(self, "jointSphere", text="Joint Sphere", toggle=1)
+            row.prop(self, "cylinder", text="Cylinder", toggle=1)
+            row.prop(self, "mesh", text="Mesh", toggle=1)
+            row.prop(self, "quad", text="Quad", toggle=1)
+
+        return col
+
 
 # has 1 capture group
 def flagRegex(commaTerminating: bool = True) -> str:
@@ -219,7 +239,7 @@ def parseColliderData(
         parseJointSphereColliders(actorData, parentObj, geometryName, filterNameFunc)
 
     if colliderSettings.mesh:
-        pass
+        parseMeshColliders(actorData, parentObj, geometryName, filterNameFunc)
 
     if colliderSettings.quad:
         parseQuadColliders(actorData, parentObj, geometryName, filterNameFunc)
@@ -380,6 +400,89 @@ def parseJointSphereCollidersItems(data: str, parentObj: bpy.types.Object, items
         obj.scale.x = radius * scale
         obj.scale.y = radius * scale
         obj.scale.z = radius * scale
+
+
+def parseMeshColliders(
+    data: str, parentObj: bpy.types.Object, geometryName: str | None, filterNameFunc: Callable[[str], bool]
+):
+    handledColliders = []
+    for match in re.finditer(
+        r"ColliderTrisInit(Type1)?\s*([0-9a-zA-Z\_]*)\s*=\s*\{(.*?)\}\s*;",
+        data,
+        flags=re.DOTALL,
+    ):
+        name = match.group(2)
+        colliderData = match.group(3)
+
+        if not filterNameFunc(geometryName, name):
+            continue
+
+        # This happens because our file including is not ideal and doesn't check for duplicate includes
+        if name in handledColliders:
+            continue
+        handledColliders.append(name)
+
+        dataList = [
+            item.strip() for item in colliderData.replace("{", "").replace("}", "").split(",") if item.strip() != ""
+        ]
+        if len(dataList) < 2 + 6:
+            raise PluginError(f"Collider {name} has unexpected struct format.")
+
+        itemsName = dataList[7]
+
+        obj = addColliderThenParent("COLSHAPE_TRIS", parentObj, None)
+        parseColliderInit(dataList, obj.ootActorCollider)
+        parseMeshCollidersItems(data, obj, itemsName, name)
+
+
+def parseMeshCollidersItems(data: str, obj: bpy.types.Object, itemsName: str, name: str):
+    match = re.search(
+        r"ColliderTrisElementInit\s*" + re.escape(itemsName) + r"\s*\[\s*[0-9A-Fa-fx]*\s*\]\s*=\s*\{(.*?)\}\s*;",
+        data,
+        flags=re.DOTALL,
+    )
+
+    if match is None:
+        raise PluginError(f"Could not find {itemsName}.")
+
+    matchData = match.group(1)
+
+    dataList = [item.strip() for item in matchData.replace("{", "").replace("}", "").split(",") if item.strip() != ""]
+    if len(dataList) % 19 != 0:
+        raise PluginError(f"{itemsName} has unexpected struct format.")
+
+    yUpToZUp = mathutils.Quaternion((1, 0, 0), math.radians(90.0))
+    materialDict = {}  # collider item hash : material index
+    vertList = []
+    materialIndexList = []
+    count = int(round(len(dataList) / 19))
+    for item in [dataList[19 * i : 19 * (i + 1)] for i in range(count)]:
+        colliderHash = tuple(item[:10])
+        if colliderHash not in materialDict:
+            material = bpy.data.materials.new(f"{name} Collider Material")
+            obj.data.materials.append(material)
+            materialDict[colliderHash] = material
+            parseColliderInfoInit(item, material.ootActorColliderItem, 0)
+        else:
+            material = materialDict[colliderHash]
+
+        verts = [
+            [
+                float(value[:-1] if value[-1] == "f" else value) / bpy.context.scene.ootBlenderScale
+                for value in item[3 * i + 10 : 3 * i + 13]
+            ]
+            for i in range(3)
+        ]
+        for i in range(3):
+            transformedVert = yUpToZUp @ mathutils.Vector(verts[i])
+            vertList.append(transformedVert[:])
+        materialIndexList.append(obj.data.materials[:].index(material))
+
+    triangleCount = int(len(vertList) / 3)
+    faces = [[3 * i + j for j in range(3)] for i in range(triangleCount)]
+    obj.data.from_pydata(vertices=vertList, edges=[], faces=faces)
+    for i in range(triangleCount):
+        obj.data.polygons[i].material_index = materialIndexList[i]
 
 
 def parseQuadColliders(
