@@ -50,6 +50,8 @@ class OOTSkeletonImportSettings(bpy.types.PropertyGroup):
     importNormals: bpy.props.BoolProperty(name="Import Normals", default=True)
     drawLayer: bpy.props.EnumProperty(name="Import Draw Layer", items=ootEnumDrawLayers)
     handleColliders: bpy.props.PointerProperty(type=OOTActorColliderImportExportSettings)
+    autoDetectActorScale: bpy.props.BoolProperty(name="Auto Detect Actor Scale", default=True)
+    actorScale: bpy.props.FloatProperty(name="Actor Scale", min=0, default=100)
 
 
 class OOTSkeletonExportSettings(bpy.types.PropertyGroup):
@@ -726,10 +728,10 @@ def ootImportSkeletonC(settings: OOTSkeletonImportSettings):
     f3dContext = OOTF3DContext(F3D("F3DEX2/LX2", False), limbList, basePath)
     f3dContext.mat().draw_layer.oot = settings.drawLayer
 
-    if overlayName is not None:
+    if overlayName is not None and settings.autoDetectActorScale:
         actorScale = ootReadActorScale(basePath, overlayName, settings.isLink)
     else:
-        actorScale = getOOTScale(100)
+        actorScale = settings.actorScale
 
     # print(limbList)
     isLOD, armatureObj = ootBuildSkeleton(
@@ -767,7 +769,7 @@ def ootImportSkeletonC(settings: OOTSkeletonImportSettings):
     f3dContext.deleteMaterialContext()
 
     if settings.handleColliders.enable:
-        parseColliderData(basePath, overlayName, settings.isLink, armatureObj, settings.handleColliders)
+        parseColliderData(settings.name, basePath, overlayName, settings.isLink, armatureObj, settings.handleColliders)
 
 
 def ootBuildSkeleton(
@@ -1089,7 +1091,7 @@ class OOT_ExportSkeletonPanel(OOT_Panel):
                     elif settings.arrayIndex2D == 1:
                         box.label(text="Child Link", icon="OPTIONS")
                     box.label(text="Requires enabling NON_MATCHING in Makefile.", icon="ERROR")
-        settings.handleColliders.draw(col, "Export Actor Colliders")
+        settings.handleColliders.draw(col, "Export Actor Colliders").enabled = False
         col.prop(settings, "useCustomPath")
         col.prop(settings, "removeVanillaData")
         col.prop(settings, "optimize")
@@ -1108,6 +1110,9 @@ class OOT_ExportSkeletonPanel(OOT_Panel):
             prop_split(col, settings, "folderName", "Object")
             if not settings.isLink:
                 prop_split(col, settings, "overlay", "Overlay")
+            col.prop(settings, "autoDetectActorScale")
+            if not settings.autoDetectActorScale:
+                prop_split(col, settings, "actorScale", "Actor Scale")
             settings.handleColliders.draw(col, "Import Actor Colliders")
             col.prop(settings, "isLink")
             if not settings.isLink:

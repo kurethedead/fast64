@@ -1,3 +1,4 @@
+from typing import Callable
 import bpy, mathutils, os, re, math
 from ..utility import PluginError, hexOrDecInt, toAlnum
 from .oot_model_classes import ootGetActorData, ootGetIncludedAssetData, ootGetActorDataPaths, ootGetLinkData
@@ -190,6 +191,7 @@ def parseColliderInfoInit(dataList: list[str], colliderItemProp: OOTActorCollide
 
 
 def parseColliderData(
+    geometryName: str,
     basePath: str,
     overlayName: str,
     isLink: bool,
@@ -204,11 +206,17 @@ def parseColliderData(
         currentPaths = [os.path.join(basePath, f"src/code/z_player_lib.c")]
     actorData = ootGetIncludedAssetData(basePath, currentPaths, actorData) + actorData
 
+    filterNameFunc = noFilter
+    if overlayName == "ovl_Boss_Sst":
+        filterNameFunc = filterForSst
+    elif overlayName == "ovl_Boss_Va":
+        filterNameFunc = filterForVa
+
     if colliderSettings.cylinder:
-        parseCylinderColliders(actorData, parentObj)
+        parseCylinderColliders(actorData, parentObj, geometryName, filterNameFunc)
 
     if colliderSettings.jointSphere:
-        parseJointSphereColliders(actorData, parentObj)
+        parseJointSphereColliders(actorData, parentObj, geometryName, filterNameFunc)
 
     if colliderSettings.mesh:
         pass
@@ -217,15 +225,55 @@ def parseColliderData(
         pass
 
 
-def parseCylinderColliders(data: str, parentObj: bpy.types.Object):
+def noFilter(name: str, colliderName: str):
+    return True
+
+
+def filterForSst(geometryName: str, colliderName: str):
+    if "Hand" in geometryName:
+        return "Hand" in colliderName
+    elif "Head" in geometryName:
+        return "Head" in colliderName
+    else:
+        return False
+
+
+def filterForVa(geometryName: str, colliderName: str):
+    if "BodySkel" in geometryName:
+        return colliderName == "sCylinderInit"
+    elif "SupportSkel" in geometryName:
+        return colliderName == "sJntSphInitSupport"
+    elif "ZapperSkel" in geometryName:
+        return colliderName == "sQuadInit"
+    elif "StumpSkel" in geometryName:
+        return False
+    elif "BariSkel" in geometryName:
+        return colliderName == "sJntSphInitBari" or colliderName == "sQuadInit"
+    else:
+        return False
+
+
+def parseCylinderColliders(
+    data: str, parentObj: bpy.types.Object, geometryName: str | None, filterNameFunc: Callable[[str], bool]
+):
+    handledColliders = []
     for match in re.finditer(
         r"ColliderCylinderInit(Type1)?\s*([0-9a-zA-Z\_]*)\s*=\s*\{(.*?)\}\s*;",
         data,
         flags=re.DOTALL,
     ):
+
         isType1 = match.group(1) is not None
         name = match.group(2)
         colliderData = match.group(3)
+
+        if not filterNameFunc(geometryName, name):
+            continue
+
+        # This happens because our file including is not ideal and doesn't check for duplicate includes
+        if name in handledColliders:
+            continue
+        handledColliders.append(name)
 
         dataList = [
             item.strip() for item in colliderData.replace("{", "").replace("}", "").split(",") if item.strip() != ""
@@ -255,7 +303,10 @@ def parseCylinderColliders(data: str, parentObj: bpy.types.Object):
         obj.location = yUpToZUp @ location
 
 
-def parseJointSphereColliders(data: str, parentObj: bpy.types.Object):
+def parseJointSphereColliders(
+    data: str, parentObj: bpy.types.Object, geometryName: str | None, filterNameFunc: Callable[[str], bool]
+):
+    handledColliders = []
     if not isinstance(parentObj.data, bpy.types.Armature):
         raise PluginError("Joint spheres can only be added to armature objects.")
     for match in re.finditer(
@@ -265,6 +316,14 @@ def parseJointSphereColliders(data: str, parentObj: bpy.types.Object):
     ):
         name = match.group(1)
         colliderData = match.group(2)
+
+        if not filterNameFunc(geometryName, name):
+            continue
+
+        # This happens because our file including is not ideal and doesn't check for duplicate includes
+        if name in handledColliders:
+            continue
+        handledColliders.append(name)
 
         dataList = [
             item.strip() for item in colliderData.replace("{", "").replace("}", "").split(",") if item.strip() != ""
@@ -295,7 +354,6 @@ def parseJointSphereCollidersItems(data: str, parentObj: bpy.types.Object, items
         raise PluginError(f"{itemsName} has unexpected struct format.")
 
     boneList = getOrderedBoneList(parentObj)
-    print(str([bone.name for bone in boneList]))
 
     count = int(round(len(dataList) / 16))
     for item in [dataList[16 * i : 16 * (i + 1)] for i in range(count)]:

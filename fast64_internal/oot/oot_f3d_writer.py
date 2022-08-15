@@ -33,8 +33,10 @@ class OOTActorColliderImportExportSettings(bpy.types.PropertyGroup):
             row = col.row(align=True)
             row.prop(self, "jointSphere", text="Joint Sphere", toggle=1)
             row.prop(self, "cylinder", text="Cylinder", toggle=1)
-            row.prop(self, "mesh", text="Mesh", toggle=1)
-            row.prop(self, "quad", text="Quad", toggle=1)
+            # row.prop(self, "mesh", text="Mesh", toggle=1)
+            # row.prop(self, "quad", text="Quad", toggle=1)
+
+        return col
 
 
 class OOTDLExportSettings(bpy.types.PropertyGroup):
@@ -62,6 +64,8 @@ class OOTDLImportSettings(bpy.types.PropertyGroup):
     importNormals: bpy.props.BoolProperty(name="Import Normals", default=True)
     drawLayer: bpy.props.EnumProperty(name="Draw Layer", items=ootEnumDrawLayers)
     handleColliders: bpy.props.PointerProperty(type=OOTActorColliderImportExportSettings)
+    autoDetectActorScale: bpy.props.BoolProperty(name="Auto Detect Actor Scale", default=True)
+    actorScale: bpy.props.FloatProperty(name="Actor Scale", min=0, default=100)
 
 
 # returns:
@@ -404,19 +408,17 @@ def ootReadActorScale(basePath: str, overlayName: str, isLink: bool) -> float:
 
     chainInitMatch = re.search(r"CHAIN_VEC3F_DIV1000\s*\(\s*scale\s*,\s*(.*?)\s*,", actorData, re.DOTALL)
     if chainInitMatch is not None:
-        try:
-            scale = hexOrDecInt(chainInitMatch.group(1))
-            return getOOTScale(1 / (scale / 1000))
-        except ValueError:
-            pass
+        scale = chainInitMatch.group(1).strip()
+        if scale[-1] == "f":
+            scale = scale[:-1]
+        return getOOTScale(1 / (float(scale) / 1000))
 
-    actorScaleMatch = re.search(r"Actor\_SetScale\s*\(\s*[A-Za-z0-9\_]*\s*,\s*(.*?)\s*\)", actorData, re.DOTALL)
+    actorScaleMatch = re.search(r"Actor\_SetScale\s*\(.*?,\s*(.*?)\s*\)", actorData, re.DOTALL)
     if actorScaleMatch is not None:
-        try:
-            scale = hexOrDecInt(actorScaleMatch.group(1))
-            return getOOTScale(1 / scale)
-        except ValueError:
-            pass
+        scale = actorScaleMatch.group(1).strip()
+        if scale[-1] == "f":
+            scale = scale[:-1]
+        return getOOTScale(1 / float(scale))
 
     return getOOTScale(100)
 
@@ -478,15 +480,15 @@ class OOT_ImportDL(bpy.types.Operator):
             data = getImportData(paths)
             f3dContext = OOTF3DContext(F3D("F3DEX2/LX2", False), [settings.name], basePath)
 
-            scale = None
+            scale = settings.actorScale
             if not settings.useCustomPath:
                 data = ootGetIncludedAssetData(basePath, paths, data) + data
 
                 if settings.overlay is not None:
                     ootReadTextureArrays(basePath, settings.overlay, settings.name, f3dContext, False, arrayIndex2D)
+
+                if settings.autoDetectActorScale:
                     scale = ootReadActorScale(basePath, settings.overlay, False)
-            if scale is None:
-                scale = getOOTScale(100)
 
             obj = importMeshC(
                 data,
@@ -561,7 +563,7 @@ class OOT_ExportDLPanel(OOT_Panel):
             if settings.is2DArray:
                 box = col.box().column()
                 prop_split(box, settings, "arrayIndex2D", "Flipbook Index")
-        settings.handleColliders.draw(col, "Export Actor Colliders")
+        settings.handleColliders.draw(col, "Export Actor Colliders").enabled = False
         prop_split(col, settings, "drawLayer", "Export Draw Layer")
         col.prop(settings, "useCustomPath")
         col.prop(settings, "removeVanillaData")
@@ -575,11 +577,14 @@ class OOT_ExportDLPanel(OOT_Panel):
         else:
             prop_split(col, settings, "folderName", "Object")
             prop_split(col, settings, "overlay", "Overlay (Optional)")
+            col.prop(settings, "autoDetectActorScale")
+            if not settings.autoDetectActorScale:
+                prop_split(col, settings, "actorScale", "Actor Scale")
             col.prop(settings, "is2DArray")
             if settings.is2DArray:
                 box = col.box().column()
                 prop_split(box, settings, "arrayIndex2D", "Flipbook Index")
-            settings.handleColliders.draw(col, "Import Actor Colliders")
+            settings.handleColliders.draw(col, "Import Actor Colliders").enabled = False
         prop_split(col, settings, "drawLayer", "Import Draw Layer")
 
         col.prop(settings, "useCustomPath")
