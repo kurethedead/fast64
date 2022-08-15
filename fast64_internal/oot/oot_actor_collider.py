@@ -29,11 +29,11 @@ def updateColliderOnObj(obj: bpy.types.Object, updateJointSiblings: bool = True)
         #    material = getColliderMat("oot_collider_cyan", (0, 0.5, 1, 0.3))
         if colliderProp.colliderShape == "COLSHAPE_QUAD":
             material = getColliderMat("oot_collider_orange", (0.2, 0.05, 0, 0.4))
-        elif queryProp.hitbox.enable and (queryProp.hurtbox.enable or queryProp.physics.enable):
+        elif queryProp.hitbox.enable and queryProp.hurtbox.enable:
             material = getColliderMat("oot_collider_purple", (0.15, 0, 0.05, 0.4))
         elif queryProp.hitbox.enable:
             material = getColliderMat("oot_collider_red", (0.2, 0, 0, 0.4))
-        elif queryProp.hurtbox.enable or queryProp.physics.enable:
+        elif queryProp.hurtbox.enable:
             material = getColliderMat("oot_collider_blue", (0, 0, 0.2, 0.4))
         else:
             material = getColliderMat("oot_collider_white", (0.2, 0.2, 0.2, 0.4))
@@ -338,10 +338,6 @@ class OOTActorColliderItemProperty(bpy.types.PropertyGroup):
     bump: bpy.props.PointerProperty(type=OOTColliderHurtboxItemProperty, name="Bump")
     objectElem: bpy.props.PointerProperty(type=OOTColliderPhysicsItemProperty, name="Object Element")
 
-    # Owner name defined her and not in OOTActorColliderProperty
-    # to allow for multiple joint sphere collections to be exported.
-    owningStruct: bpy.props.StringProperty(default="sColliderInit", name="Owning Struct")
-
     def draw(self, obj: bpy.types.Object | None, layout: bpy.types.UILayout):
         if obj is not None and obj.ootActorCollider.colliderShape == "COLSHAPE_JNTSPH":
             armatureObj = obj.parent
@@ -357,7 +353,6 @@ class OOTActorColliderItemProperty(bpy.types.PropertyGroup):
             layout.label(text="Materials will not be visualized.")
         else:
             layout = layout.column()
-            prop_split(layout, self, "owningStruct", "Owning Struct")
             prop_split(layout, self, "element", "Element Type")
             self.touch.draw(layout)
             self.bump.draw(layout)
@@ -527,6 +522,7 @@ def addCollider(shapeName: str) -> bpy.types.Object:
     location = mathutils.Vector(bpy.context.scene.cursor.location)
     bpy.ops.mesh.primitive_plane_add(size=2, enter_editmode=False, align="WORLD", location=location[:])
     planeObj = bpy.context.view_layer.objects.active
+    planeObj.data.clear_geometry()
     planeObj.name = "Collider"
     planeObj.ootGeometryType = "Actor Collider"
 
