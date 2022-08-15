@@ -766,8 +766,8 @@ def ootImportSkeletonC(settings: OOTSkeletonImportSettings):
 
     f3dContext.deleteMaterialContext()
 
-    if settings.includeColliders:
-        parseColliderData(basePath, overlayName, settings.isLink, armatureObj)
+    if settings.handleColliders.enable:
+        parseColliderData(basePath, overlayName, settings.isLink, armatureObj, settings.handleColliders)
 
 
 def ootBuildSkeleton(

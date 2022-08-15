@@ -15,6 +15,7 @@ from .oot_actor_collider import (
     OOTDamageFlagsProperty,
     addColliderThenParent,
 )
+from .oot_f3d_writer import OOTActorColliderImportExportSettings
 from .oot_utility import getOrderedBoneList, getOOTScale
 
 # has 1 capture group
@@ -188,7 +189,13 @@ def parseColliderInfoInit(dataList: list[str], colliderItemProp: OOTActorCollide
     parseObjectElement(dataList, colliderItemProp.objectElem, startIndex)
 
 
-def parseColliderData(basePath: str, overlayName: str, isLink: bool, parentObj: bpy.types.Object):
+def parseColliderData(
+    basePath: str,
+    overlayName: str,
+    isLink: bool,
+    parentObj: bpy.types.Object,
+    colliderSettings: OOTActorColliderImportExportSettings,
+):
     if not isLink:
         actorData = ootGetActorData(basePath, overlayName)
         currentPaths = ootGetActorDataPaths(basePath, overlayName)
@@ -197,8 +204,17 @@ def parseColliderData(basePath: str, overlayName: str, isLink: bool, parentObj: 
         currentPaths = [os.path.join(basePath, f"src/code/z_player_lib.c")]
     actorData = ootGetIncludedAssetData(basePath, currentPaths, actorData) + actorData
 
-    parseCylinderColliders(actorData, parentObj)
-    parseJointSphereColliders(actorData, parentObj)
+    if colliderSettings.cylinder:
+        parseCylinderColliders(actorData, parentObj)
+
+    if colliderSettings.jointSphere:
+        parseJointSphereColliders(actorData, parentObj)
+
+    if colliderSettings.mesh:
+        pass
+
+    if colliderSettings.quad:
+        pass
 
 
 def parseCylinderColliders(data: str, parentObj: bpy.types.Object):
