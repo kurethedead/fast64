@@ -96,8 +96,10 @@ To export an animation, select an armature and click "Export", which will export
 
 ### Actor Colliders
 You can add actor colliders to an armature or display list using the operators in the OOT Tools menu. The collider properties will be shown under the object properties tab, except for mesh collider which will store part of the collider properties in the material properties tab. The struct name is also stored in the object properties, which is what determines what the export collider name will be. 
-    - For quad colliders, the actual shape is ignored and only the properties are relevant.
-    - For joint sphere colliders, the armature specific section is shared among all joint spheres on the armature. This means that an armature can only have one joint sphere collider collection.
+
+- For quad colliders, the actual shape is ignored and only the properties are relevant.
+- For joint sphere colliders, the armature specific section is shared among all joint spheres on the armature. This means that an armature can only have one joint sphere collider collection.
+
 The scale of the collider objects determines their sizes, so don't worry if they have unapplied scales.
 
 ### Actor Collider Importing
