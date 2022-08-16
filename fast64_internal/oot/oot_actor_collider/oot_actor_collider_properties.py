@@ -1,11 +1,11 @@
 from typing import Dict
 import bpy, mathutils, os
 from bpy.utils import register_class, unregister_class
-from ..utility import PluginError, prop_split, parentObject, raisePluginError, copyPropertyGroup
+from ...utility import PluginError, prop_split, parentObject, raisePluginError, copyPropertyGroup
 from bpy.app.handlers import persistent
 import logging
-from ..f3d.f3d_material import createF3DMat, update_preset_manual
-from .oot_constants import ootEnumColliderShape, ootEnumColliderType, ootEnumColliderElement, ootEnumHitboxSound
+from ...f3d.f3d_material import createF3DMat, update_preset_manual
+from ..oot_constants import ootEnumColliderShape, ootEnumColliderType, ootEnumColliderElement, ootEnumHitboxSound
 
 logging.basicConfig(format="%(asctime)s: %(message)s", datefmt="%m/%d/%Y %I:%M:%S %p")
 logger = logging.getLogger(__name__)

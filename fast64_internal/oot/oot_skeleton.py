@@ -13,7 +13,7 @@ from ..f3d.f3d_writer import *
 from ..f3d.f3d_material import TextureProperty, tmemUsageUI
 from .oot_f3d_writer import *
 from .oot_texture_array import ootReadTextureArrays
-from .oot_actor_collider_c import parseColliderData
+from .oot_actor_collider import parseColliderData
 
 
 ootEnumBoneType = [

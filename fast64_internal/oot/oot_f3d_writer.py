@@ -12,7 +12,7 @@ from ..panels import OOT_Panel
 from .oot_model_classes import *
 from .oot_scene_room import *
 from .oot_texture_array import *
-from .oot_actor_collider_c import OOTActorColliderImportExportSettings, parseColliderData
+from .oot_actor_collider import OOTActorColliderImportExportSettings, parseColliderData
 
 ootEnumGeometryType = [
     ("Regular", "Regular", "Regular"),

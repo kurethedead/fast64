@@ -1,9 +1,9 @@
 from typing import Callable
 import bpy, mathutils, os, re, math
-from ..utility import PluginError, hexOrDecInt, toAlnum
-from .oot_model_classes import ootGetActorData, ootGetIncludedAssetData, ootGetActorDataPaths, ootGetLinkData
-from .oot_constants import ootEnumColliderShape, ootEnumColliderType, ootEnumColliderElement, ootEnumHitboxSound
-from .oot_actor_collider import (
+from ...utility import PluginError, hexOrDecInt, toAlnum
+from ..oot_model_classes import ootGetActorData, ootGetIncludedAssetData, ootGetActorDataPaths, ootGetLinkData
+from ..oot_constants import ootEnumColliderShape, ootEnumColliderType, ootEnumColliderElement, ootEnumHitboxSound
+from .oot_actor_collider_properties import (
     OOTActorColliderItemProperty,
     OOTActorColliderProperty,
     OOTColliderHitboxItemProperty,
@@ -16,7 +16,7 @@ from .oot_actor_collider import (
     OOTDamageFlagsProperty,
     addColliderThenParent,
 )
-from .oot_utility import getOrderedBoneList, getOOTScale
+from ..oot_utility import getOrderedBoneList, getOOTScale
 
 
 class OOTActorColliderImportExportSettings(bpy.types.PropertyGroup):
