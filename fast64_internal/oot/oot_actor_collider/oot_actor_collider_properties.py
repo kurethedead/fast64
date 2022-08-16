@@ -11,6 +11,31 @@ logging.basicConfig(format="%(asctime)s: %(message)s", datefmt="%m/%d/%Y %I:%M:%
 logger = logging.getLogger(__name__)
 
 
+class OOTActorColliderImportExportSettings(bpy.types.PropertyGroup):
+    enable: bpy.props.BoolProperty(name="Actor Colliders", default=False)
+    chooseSpecific: bpy.props.BoolProperty(name="Import Specific Colliders")
+    specificColliders: bpy.props.StringProperty(name="Colliders (Comma Separated List)")
+    jointSphere: bpy.props.BoolProperty(name="Joint Sphere", default=True)
+    cylinder: bpy.props.BoolProperty(name="Cylinder", default=True)
+    mesh: bpy.props.BoolProperty(name="Mesh", default=True)
+    quad: bpy.props.BoolProperty(name="Quad", default=True)
+
+    def draw(self, layout: bpy.types.UILayout, title: str):
+        col = layout.column()
+        col.prop(self, "enable", text=title)
+        if self.enable:
+            col.prop(self, "chooseSpecific")
+            if self.chooseSpecific:
+                col.prop(self, "specificColliders")
+            row = col.row(align=True)
+            row.prop(self, "jointSphere", text="Joint Sphere", toggle=1)
+            row.prop(self, "cylinder", text="Cylinder", toggle=1)
+            row.prop(self, "mesh", text="Mesh", toggle=1)
+            row.prop(self, "quad", text="Quad", toggle=1)
+
+        return col
+
+
 def updateCollider(self, context: bpy.types.Context) -> None:
     updateColliderOnObj(context.object)
 
