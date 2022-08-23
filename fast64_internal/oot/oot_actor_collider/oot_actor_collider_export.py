@@ -1,6 +1,6 @@
 from typing import Callable
 import bpy, mathutils, os, re, math
-from ...utility import CData, PluginError, hexOrDecInt, toAlnum
+from ...utility import CData, PluginError, hexOrDecInt, toAlnum, readFile, writeFile
 from ..oot_model_classes import ootGetActorData, ootGetIncludedAssetData, ootGetActorDataPaths, ootGetLinkData
 from ..oot_constants import ootEnumColliderShape, ootEnumColliderType, ootEnumColliderElement, ootEnumHitboxSound
 from .oot_actor_collider_properties import (
@@ -16,7 +16,45 @@ from .oot_actor_collider_properties import (
     OOTDamageFlagsProperty,
     OOTActorColliderImportExportSettings,
 )
-from ..oot_utility import getOrderedBoneList, getOOTScale
+from ..oot_utility import getOrderedBoneList, getOOTScale, getActorFilepaths
+
+
+def removeExistingColliderData(exportPath: str, overlayName: str, isLink: bool, newColliderData: str) -> str:
+    actorFilePaths = getActorFilepaths(exportPath, overlayName, isLink)
+
+    for pathType, actorPath in actorFilePaths.items():
+        data = readFile(actorPath)
+        newActorData = data
+
+        for colliderMatch in re.finditer(
+            r"static\s*Collider[a-zA-Z0-9]*\s*([a-zA-Z0-9\_]*)", newColliderData, flags=re.DOTALL
+        ):
+            name = colliderMatch.group(1)
+            match = re.search(
+                r"static\s*Collider[a-zA-Z0-9]*\s*" + re.escape(name) + r".*?\}\s*;", newActorData, flags=re.DOTALL
+            )
+            if match:
+                newActorData = newActorData[: match.start(0)] + newActorData[match.end(0) :]
+
+        if newActorData != data:
+            writeFile(actorPath, newActorData)
+
+
+def writeColliderData(obj: bpy.types.Object, exportPath: str, overlayName: str, isLink: bool) -> str:
+    actorFilePath = getActorFilepaths(exportPath, overlayName, isLink)["Actor"]
+    actor = os.path.basename(actorFilePath)[:-2]
+    colliderData = getColliderData(obj)
+
+    colliderFilename = actor + "_colliders.c"
+    colliderInclude = f'#include "{colliderFilename}"'
+
+    actorData = readFile(actorFilePath)
+    if colliderInclude not in actorData:
+        actorData = colliderInclude + "\n" + actorData
+        writeFile(actorFilePath, actorData)
+
+    colliderFilePath = os.path.join(os.path.dirname(actorFilePath), colliderFilename)
+    writeFile(colliderFilePath, f'#include "global.h"\n\n' + colliderData.source)
 
 
 def getColliderData(parentObj: bpy.types.Object) -> CData:
@@ -71,11 +109,12 @@ def getShapeData(obj: bpy.types.Object, bone: bpy.types.Bone | None = None) -> s
         return f"{{ {limb}, {{ {{ {translateData} }} , {radius} }}, 100 }},\n"
 
     elif shape == "COLSHAPE_CYLINDER":
+        isUniformXY = abs(scale[0] - scale[1]) < 0.001
+
         # Convert to OOT space transforms
         translate = bpy.context.scene.ootBlenderScale * (yUpToZUp.inverted() @ translate)
         scale = bpy.context.scene.ootBlenderScale * (yUpToZUp.inverted() @ scale)
 
-        isUniformXY = abs(scale[0] - scale[1]) < 0.001
         if not isUniformXY:
             raise PluginError(f"Cylinder collider {obj.name} must have uniform XY scale (radius).")
         radius = round(abs(scale[0]))
@@ -123,7 +162,10 @@ def getColliderDataJointSphere(colliderObjs: list[bpy.types.Object]) -> str:
 
     collider = sphereObjs[0].parent.ootActorCollider
     name = collider.name
-    elementsName = collider.name + "Items"
+    if "Init" in name:
+        elementsName = name[: name.index("Init")] + "Items" + name[name.index("Init") :]
+    else:
+        elementsName = collider.name + "Items"
     colliderData = ""
 
     colliderData += f"static ColliderJntSphElementInit {elementsName}[{len(sphereObjs)}] = {{\n"
@@ -166,7 +208,10 @@ def getColliderDataMesh(colliderObjs: list[bpy.types.Object]) -> str:
     for obj in meshObjs:
         collider = obj.ootActorCollider
         name = collider.name
-        elementsName = collider.name + "Items"
+        if "Init" in name:
+            elementsName = name[: name.index("Init")] + "Items" + name[name.index("Init") :]
+        else:
+            elementsName = collider.name + "Items"
         mesh = obj.data
 
         if not (isinstance(mesh, bpy.types.Mesh) and len(mesh.materials) > 0):
@@ -194,7 +239,9 @@ def getColliderDataMesh(colliderObjs: list[bpy.types.Object]) -> str:
             meshData += "\t\t" + triData
             meshData += "\t},\n"
 
-        colliderData += f"static ColliderTrisElementInit {elementsName}[{len(mesh.materials)}] = {{\n{meshData}}};\n\n"
+        colliderData += (
+            f"static ColliderTrisElementInit {elementsName}[{len(mesh.loop_triangles)}] = {{\n{meshData}}};\n\n"
+        )
         colliderData += f"static ColliderTrisInit{'Type1' if collider.physics.isType1 else ''} {name} = {{\n"
         colliderData += collider.to_c(1)
         colliderData += f"\t{len(obj.data.loop_triangles)},\n"

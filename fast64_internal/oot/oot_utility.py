@@ -143,6 +143,29 @@ ootSceneDirs = {
 }
 
 
+def getActorFilepaths(exportPath: str, overlayName: str, isLink: bool) -> dict[str, str]:
+    actorFilePaths = {}
+    if isLink:
+        actorFilePaths["Actor"] = os.path.join(exportPath, f"src/overlays/actors/ovl_player_actor/z_player.c")
+        actorFilePaths["Data"] = os.path.join(exportPath, f"src/code/z_player_lib.c")
+    else:
+        actorFilePaths["Actor"] = os.path.join(
+            exportPath, f"src/overlays/actors/{overlayName}/z_{overlayName[4:].lower()}.c"
+        )
+
+        actorFilePath = actorFilePaths["Actor"]
+
+        actorFileDataPath = f"{actorFilePath[:-2]}_data.c"  # some bosses store texture arrays here
+        if os.path.exists(actorFileDataPath):
+            actorFilePaths["Data"] = actorFileDataPath
+
+        actorFileCollisionPath = f"{actorFilePath[:-2]}_colchk.c"  # some bosses store colliders here
+        if os.path.exists(actorFileCollisionPath):
+            actorFilePaths["Colliders"] = actorFileCollisionPath
+
+    return actorFilePaths
+
+
 def getOOTScale(actorScale: float) -> float:
     return bpy.context.scene.ootBlenderScale * actorScale
 

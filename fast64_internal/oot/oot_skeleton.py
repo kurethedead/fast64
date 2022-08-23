@@ -625,13 +625,13 @@ def ootConvertArmatureToC(originalArmatureObj: bpy.types.Object, settings: OOTSk
     data.append(exportData.all())
     data.append(skeletonC)
 
-    if settings.handleColliders.enable:
-        colliderData = getColliderData(originalArmatureObj)
-        data.append(colliderData)
-
     if settings.useCustomPath:
         textureArrayData = writeTextureArraysNew(fModel, arrayIndex2D)
         data.append(textureArrayData)
+
+        if settings.handleColliders.enable:
+            colliderData = getColliderData(originalArmatureObj)
+            data.append(colliderData)
 
     path = ootGetPath(exportPath, settings.useCustomPath, "assets/objects/", settings.folderName, False, False)
     writeCData(data, os.path.join(path, skeletonName + ".h"), os.path.join(path, skeletonName + ".c"))
@@ -641,6 +641,15 @@ def ootConvertArmatureToC(originalArmatureObj: bpy.types.Object, settings: OOTSk
         addIncludeFiles(settings.folderName, path, skeletonName)
         if settings.removeVanillaData:
             ootRemoveSkeleton(path, settings.folderName, skeletonName)
+
+            if settings.handleColliders.enable:
+                colliderData = getColliderData(originalArmatureObj)
+                removeExistingColliderData(
+                    bpy.context.scene.ootDecompPath, settings.overlay, settings.isLink, colliderData.source
+                )
+                writeColliderData(
+                    originalArmatureObj, bpy.context.scene.ootDecompPath, settings.overlay, settings.isLink
+                )
 
 
 class OOTDLEntry:

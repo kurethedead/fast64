@@ -19,7 +19,7 @@ def flipbook_2d_to_c(flipbook, isStatic, count):
     newArrayData += f"{flipbook.name}[][{count}] = {{ \n"
     for i in range(count):
         newArrayData += "{\n" + flipbook_data_to_c(flipbook) + "},\n"
-    newArrayData += " };"
+    newArrayData += "};"
     return newArrayData
 
 

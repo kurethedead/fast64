@@ -12,7 +12,13 @@ from ..panels import OOT_Panel
 from .oot_model_classes import *
 from .oot_scene_room import *
 from .oot_texture_array import *
-from .oot_actor_collider import OOTActorColliderImportExportSettings, parseColliderData, getColliderData
+from .oot_actor_collider import (
+    OOTActorColliderImportExportSettings,
+    parseColliderData,
+    getColliderData,
+    removeExistingColliderData,
+    writeColliderData,
+)
 
 ootEnumGeometryType = [
     ("Regular", "Regular", "Regular"),
@@ -249,13 +255,13 @@ def ootConvertMeshToC(originalObj: bpy.types.Object, settings: OOTDLExportSettin
 
     data.append(exportData.all())
 
-    if settings.handleColliders.enable:
-        colliderData = getColliderData(originalObj)
-        data.append(colliderData)
-
     if settings.useCustomPath:
         textureArrayData = writeTextureArraysNew(fModel, arrayIndex2D)
         data.append(textureArrayData)
+
+        if settings.handleColliders.enable:
+            colliderData = getColliderData(originalObj)
+            data.append(colliderData)
 
     path = ootGetPath(exportPath, settings.useCustomPath, "assets/objects/", settings.folderName, False, False)
     writeCData(data, os.path.join(path, name + ".h"), os.path.join(path, name + ".c"))
@@ -268,27 +274,30 @@ def ootConvertMeshToC(originalObj: bpy.types.Object, settings: OOTDLExportSettin
             sourcePath = os.path.join(path, settings.folderName + ".c")
             removeDL(sourcePath, headerPath, name)
 
+            if settings.handleColliders.enable:
+                removeExistingColliderData(
+                    bpy.context.scene.ootDecompPath, settings.overlay, False, colliderData.source
+                )
+                writeColliderData(originalObj, bpy.context.scene.ootDecompPath, settings.overlay, False)
+
 
 def writeTextureArraysNew(fModel: OOTModel, arrayIndex: int):
     textureArrayData = CData()
     for flipbook in fModel.flipbooks:
         if flipbook.exportMode == "Array":
             if arrayIndex is not None:
-                textureArrayData.source += flipbook_2d_to_c(flipbook, True, arrayIndex + 1) + "\n"
+                textureArrayData.source += flipbook_2d_to_c(flipbook, True, arrayIndex + 1) + "\n\n"
             else:
-                textureArrayData.source += flipbook_to_c(flipbook, True) + "\n"
+                textureArrayData.source += flipbook_to_c(flipbook, True) + "\n\n"
     return textureArrayData
 
 
 def writeTextureArraysExisting(exportPath: str, overlayName: str, isLink: bool, arrayIndex2D: int, fModel: OOTModel):
-    if isLink:
-        actorFilePath = os.path.join(exportPath, f"src/code/z_player_lib.c")
+    actorFilePaths = getActorFilepaths(exportPath, overlayName, isLink)
+    if "Data" in actorFilePaths:
+        actorFilePath = actorFilePaths["Data"]
     else:
-        actorFilePath = os.path.join(exportPath, f"src/overlays/actors/{overlayName}/z_{overlayName[4:].lower()}.c")
-        actorFileDataPath = f"{actorFilePath[:-2]}_data.c"  # some bosses store texture arrays here
-
-        if os.path.exists(actorFileDataPath):
-            actorFilePath = actorFileDataPath
+        actorFilePath = actorFilePaths["Actor"]
 
     if not os.path.exists(actorFilePath):
         print(f"{actorFilePath} not found, ignoring texture array writing.")
