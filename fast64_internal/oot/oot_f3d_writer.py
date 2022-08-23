@@ -12,7 +12,7 @@ from ..panels import OOT_Panel
 from .oot_model_classes import *
 from .oot_scene_room import *
 from .oot_texture_array import *
-from .oot_actor_collider import OOTActorColliderImportExportSettings, parseColliderData
+from .oot_actor_collider import OOTActorColliderImportExportSettings, parseColliderData, getColliderData
 
 ootEnumGeometryType = [
     ("Regular", "Regular", "Regular"),
@@ -214,6 +214,7 @@ def ootConvertMeshToC(originalObj: bpy.types.Object, settings: OOTDLExportSettin
     isHWv1 = bpy.context.scene.isHWv1
     f3dType = bpy.context.scene.f3d_type
     exportPath = bpy.path.abspath(settings.customPath)
+    overlayName = settings.overlay if not settings.useCustomPath else None
     arrayIndex2D = settings.arrayIndex2D if settings.is2DArray else None
 
     name = toAlnum(settings.name)
@@ -247,6 +248,10 @@ def ootConvertMeshToC(originalObj: bpy.types.Object, settings: OOTDLExportSettin
     exportData = fModel.to_c(TextureExportSettings(False, saveTextures, "test"), OOTGfxFormatter(ScrollMethod.Vertex))
 
     data.append(exportData.all())
+
+    if settings.handleColliders.enable:
+        colliderData = getColliderData(originalObj)
+        data.append(colliderData)
 
     if settings.useCustomPath:
         textureArrayData = writeTextureArraysNew(fModel, arrayIndex2D)
@@ -547,7 +552,7 @@ class OOT_ExportDLPanel(OOT_Panel):
             if settings.is2DArray:
                 box = col.box().column()
                 prop_split(box, settings, "arrayIndex2D", "Flipbook Index")
-        settings.handleColliders.draw(col, "Export Actor Colliders").enabled = False
+        settings.handleColliders.draw(col, "Export Actor Colliders")
         prop_split(col, settings, "drawLayer", "Export Draw Layer")
         col.prop(settings, "useCustomPath")
         col.prop(settings, "removeVanillaData")

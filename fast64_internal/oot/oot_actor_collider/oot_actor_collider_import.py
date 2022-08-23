@@ -89,17 +89,17 @@ def parseACFlags(flagData: str, acProp: OOTColliderHurtboxProperty):
 
 def parseOCFlags(oc1Data: str, oc2Data: str | None, ocProp: OOTColliderPhysicsProperty):
     flags1 = [flag.strip() for flag in oc1Data.split("|")]
-    ocProp.enable = "OC_ON" in flags1
-    ocProp.noPush = "OC_NO_PUSH" in flags1
+    ocProp.enable = "OC1_ON" in flags1
+    ocProp.noPush = "OC1_NO_PUSH" in flags1
     ocProp.collidesWith.player = "OC1_TYPE_PLAYER" in flags1 or "OC1_TYPE_ALL" in flags1
     ocProp.collidesWith.type1 = "OC1_TYPE_1" in flags1 or "OC1_TYPE_ALL" in flags1
     ocProp.collidesWith.type2 = "OC1_TYPE_2" in flags1 or "OC1_TYPE_ALL" in flags1
 
     if oc2Data is not None:
         flags2 = [flag.strip() for flag in oc2Data.split("|")]
-        ocProp.isCollider.player = "OC2_TYPE_PLAYER" in flags2 or "OC1_TYPE_ALL" in flags2
-        ocProp.isCollider.type1 = "OC2_TYPE_1" in flags2 or "OC1_TYPE_ALL" in flags2
-        ocProp.isCollider.type2 = "OC2_TYPE_2" in flags2 or "OC1_TYPE_ALL" in flags2
+        ocProp.isCollider.player = "OC2_TYPE_PLAYER" in flags2
+        ocProp.isCollider.type1 = "OC2_TYPE_1" in flags2
+        ocProp.isCollider.type2 = "OC2_TYPE_2" in flags2
         ocProp.skipHurtboxCheck = "OC2_FIRST_ONLY" in flags2
         ocProp.unk1 = "OC2_UNK1" in flags2
         ocProp.unk2 = "OC2_UNK2" in flags2
@@ -161,6 +161,8 @@ def parseTouch(dataList: list[str], touch: OOTColliderHitboxItemProperty, startI
             touch.soundEffect = flag
 
     touch.drawHitmarksForEveryCollision = "TOUCH_AT_HITMARK" in flags
+    touch.closestBumper = "TOUCH_NEAREST" in flags
+    touch.unk7 = "TOUCH_UNK7" in flags
 
 
 def parseBump(dataList: list[str], bump: OOTColliderHurtboxItemProperty, startIndex: int):
@@ -172,7 +174,7 @@ def parseBump(dataList: list[str], bump: OOTColliderHurtboxItemProperty, startIn
     flags = [flag.strip() for flag in dataList[startIndex + 8].split("|")]
     bump.enable = "BUMP_ON" in flags
     bump.hookable = "BUMP_HOOKABLE" in flags
-    bump.giveInfoToHit = "BUMP_NO_AT_INFO" in flags
+    bump.giveInfoToHit = "BUMP_NO_AT_INFO" not in flags
     bump.takesDamage = "BUMP_NO_DAMAGE" not in flags
     bump.hasSound = "BUMP_NO_SWORD_SFX" not in flags
     bump.hasHitmark = "BUMP_NO_HITMARK" not in flags
@@ -181,7 +183,7 @@ def parseBump(dataList: list[str], bump: OOTColliderHurtboxItemProperty, startIn
 def parseObjectElement(dataList: list[str], objectElem: OOTColliderPhysicsItemProperty, startIndex: int):
     flags = [flag.strip() for flag in dataList[startIndex + 9].split("|")]
     objectElem.enable = "OCELEM_ON" in flags
-    objectElem.toggleUnk3 = "OCELEM_UNK3" in flags
+    objectElem.unk3 = "OCELEM_UNK3" in flags
 
 
 def parseColliderInfoInit(dataList: list[str], colliderItemProp: OOTActorColliderItemProperty, startIndex: int):
@@ -310,8 +312,6 @@ def parseJointSphereColliders(
     data: str, parentObj: bpy.types.Object, geometryName: str | None, filterNameFunc: Callable[[str, str], bool]
 ):
     handledColliders = []
-    if not isinstance(parentObj.data, bpy.types.Armature):
-        raise PluginError("Joint spheres can only be added to armature objects.")
     for match in re.finditer(
         r"ColliderJntSphInit\s*([0-9a-zA-Z\_]*)\s*=\s*\{(.*?)\}\s*;",
         data,
@@ -374,7 +374,7 @@ def parseJointSphereCollidersItems(data: str, parentObj: bpy.types.Object, items
             [hexOrDecInt(value) / (getOOTScale(parentObj.ootActorScale)) for value in item[11:14]]
         )
         radius = hexOrDecInt(item[14]) / bpy.context.scene.ootBlenderScale
-        scale = hexOrDecInt(item[15]) / 100
+        scale = hexOrDecInt(item[15]) / 100  # code defined constant
 
         obj = addColliderThenParent("COLSHAPE_JNTSPH", parentObj, boneList[limb])
         parseColliderInfoInit(item, obj.ootActorColliderItem, 0)

@@ -8,17 +8,17 @@ from ..utility import prop_split
 
 def flipbook_to_c(flipbook, isStatic):
     newArrayData = "void* " if not isStatic else "static void* "
-    newArrayData += f"{flipbook.name}[] = {{ "
+    newArrayData += f"{flipbook.name}[] = {{ \n"
     newArrayData += flipbook_data_to_c(flipbook)
-    newArrayData += " };"
+    newArrayData += "};"
     return newArrayData
 
 
 def flipbook_2d_to_c(flipbook, isStatic, count):
     newArrayData = "void* " if not isStatic else "static void* "
-    newArrayData += f"{flipbook.name}[][{count}] = {{ "
+    newArrayData += f"{flipbook.name}[][{count}] = {{ \n"
     for i in range(count):
-        newArrayData += "{ " + flipbook_data_to_c(flipbook) + " },\n"
+        newArrayData += "{\n" + flipbook_data_to_c(flipbook) + "},\n"
     newArrayData += " };"
     return newArrayData
 
@@ -26,7 +26,7 @@ def flipbook_2d_to_c(flipbook, isStatic, count):
 def flipbook_data_to_c(flipbook):
     newArrayData = ""
     for textureName in flipbook.textureNames:
-        newArrayData += textureName + ",\n"
+        newArrayData += "\t" + textureName + ",\n"
     return newArrayData
 
 

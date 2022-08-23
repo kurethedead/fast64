@@ -13,7 +13,7 @@ from ..f3d.f3d_writer import *
 from ..f3d.f3d_material import TextureProperty, tmemUsageUI
 from .oot_f3d_writer import *
 from .oot_texture_array import ootReadTextureArrays
-from .oot_actor_collider import parseColliderData
+from .oot_actor_collider import parseColliderData, getColliderData
 
 
 ootEnumBoneType = [
@@ -625,6 +625,10 @@ def ootConvertArmatureToC(originalArmatureObj: bpy.types.Object, settings: OOTSk
     data.append(exportData.all())
     data.append(skeletonC)
 
+    if settings.handleColliders.enable:
+        colliderData = getColliderData(originalArmatureObj)
+        data.append(colliderData)
+
     if settings.useCustomPath:
         textureArrayData = writeTextureArraysNew(fModel, arrayIndex2D)
         data.append(textureArrayData)
@@ -1095,7 +1099,7 @@ class OOT_ExportSkeletonPanel(OOT_Panel):
                     elif settings.arrayIndex2D == 1:
                         box.label(text="Child Link", icon="OPTIONS")
                     box.label(text="Requires enabling NON_MATCHING in Makefile.", icon="ERROR")
-        settings.handleColliders.draw(col, "Export Actor Colliders").enabled = False
+        settings.handleColliders.draw(col, "Export Actor Colliders")
         col.prop(settings, "useCustomPath")
         col.prop(settings, "removeVanillaData")
         col.prop(settings, "optimize")

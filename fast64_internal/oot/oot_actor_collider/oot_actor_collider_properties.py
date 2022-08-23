@@ -1,7 +1,8 @@
+from textwrap import indent
 from typing import Dict
 import bpy, mathutils, os
 from bpy.utils import register_class, unregister_class
-from ...utility import PluginError, prop_split, parentObject, raisePluginError, copyPropertyGroup
+from ...utility import PluginError, prop_split, parentObject, raisePluginError, copyPropertyGroup, iter_prop
 from bpy.app.handlers import persistent
 import logging
 from ...f3d.f3d_material import createF3DMat, update_preset_manual
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 class OOTActorColliderImportExportSettings(bpy.types.PropertyGroup):
     enable: bpy.props.BoolProperty(name="Actor Colliders", default=False)
-    chooseSpecific: bpy.props.BoolProperty(name="Import Specific Colliders")
+    chooseSpecific: bpy.props.BoolProperty(name="Choose Specific Colliders")
     specificColliders: bpy.props.StringProperty(name="Colliders (Comma Separated List)")
     jointSphere: bpy.props.BoolProperty(name="Joint Sphere", default=True)
     cylinder: bpy.props.BoolProperty(name="Cylinder", default=True)
@@ -170,11 +171,47 @@ class OOTDamageFlagsProperty(bpy.types.PropertyGroup):
             row.prop(self, "unknown1", toggle=1)
             row.prop(self, "unknown2", toggle=1)
 
+    def to_c(self):
+        flags = (
+            ((1 if self.dekuNut else 0) << 0)
+            | ((1 if self.dekuStick else 0) << 1)
+            | ((1 if self.slingshot else 0) << 2)
+            | ((1 if self.explosive else 0) << 3)
+            | ((1 if self.boomerang else 0) << 4)
+            | ((1 if self.arrowNormal else 0) << 5)
+            | ((1 if self.hammerSwing else 0) << 6)
+            | ((1 if self.hookshot else 0) << 7)
+            | ((1 if self.slashKokiriSword else 0) << 8)
+            | ((1 if self.slashMasterSword else 0) << 9)
+            | ((1 if self.slashGiantSword else 0) << 10)
+            | ((1 if self.arrowFire else 0) << 11)
+            | ((1 if self.arrowIce else 0) << 12)
+            | ((1 if self.arrowLight else 0) << 13)
+            | ((1 if self.arrowUnk1 else 0) << 14)
+            | ((1 if self.arrowUnk2 else 0) << 15)
+            | ((1 if self.arrowUnk3 else 0) << 16)
+            | ((1 if self.magicFire else 0) << 17)
+            | ((1 if self.magicIce else 0) << 18)
+            | ((1 if self.magicLight else 0) << 19)
+            | ((1 if self.shield else 0) << 20)
+            | ((1 if self.mirrorRay else 0) << 21)
+            | ((1 if self.spinKokiriSword else 0) << 22)
+            | ((1 if self.spinGiantSword else 0) << 23)
+            | ((1 if self.spinMasterSword else 0) << 24)
+            | ((1 if self.jumpKokiriSword else 0) << 25)
+            | ((1 if self.jumpGiantSword else 0) << 26)
+            | ((1 if self.jumpMasterSword else 0) << 27)
+            | ((1 if self.unknown1 else 0) << 28)
+            | ((1 if self.unblockable else 0) << 29)
+            | ((1 if self.hammerJump else 0) << 30)
+            | ((1 if self.unknown2 else 0) << 31)
+        )
+        return format(flags, "#010x")
+
 
 # AT
 class OOTColliderHitboxProperty(bpy.types.PropertyGroup):
     enable: bpy.props.BoolProperty(name="Hitbox (AT)", update=updateCollider, default=False)
-    attacksBounceOff: bpy.props.BoolProperty(name="Attacks Bounce Off")
     alignPlayer: bpy.props.BoolProperty(name="Player", default=False)
     alignEnemy: bpy.props.BoolProperty(name="Enemy", default=True)
     alignOther: bpy.props.BoolProperty(name="Other", default=False)
@@ -184,13 +221,28 @@ class OOTColliderHitboxProperty(bpy.types.PropertyGroup):
         layout = layout.box().column()
         layout.prop(self, "enable")
         if self.enable:
-            layout.prop(self, "attacksBounceOff")
             alignToggles = layout.row(align=True)
             alignToggles.label(text="Aligned")
             alignToggles.prop(self, "alignPlayer", toggle=1)
             alignToggles.prop(self, "alignEnemy", toggle=1)
             alignToggles.prop(self, "alignOther", toggle=1)
             alignToggles.prop(self, "alignSelf", toggle=1)
+
+    # Note that z_boss_sst_colchk has case where _ON is not set, but other flags are still set.
+    def to_c(self):
+        flagList = []
+        flagList.append("AT_ON") if self.enable else None
+        if self.alignPlayer and self.alignEnemy and self.alignOther:
+            flagList.append("AT_TYPE_ALL")
+        else:
+            flagList.append("AT_TYPE_PLAYER") if self.alignPlayer else None
+            flagList.append("AT_TYPE_ENEMY") if self.alignEnemy else None
+            flagList.append("AT_TYPE_OTHER") if self.alignOther else None
+        flagList.append("AT_TYPE_SELF") if self.alignSelf else None
+
+        flagList = ["AT_NONE"] if len(flagList) == 0 else flagList
+
+        return " | ".join(flagList)
 
 
 # AC
@@ -213,6 +265,23 @@ class OOTColliderHurtboxProperty(bpy.types.PropertyGroup):
             hurtToggles.prop(self, "hurtByPlayer", toggle=1)
             hurtToggles.prop(self, "hurtByEnemy", toggle=1)
             hurtToggles.prop(self, "hurtByOther", toggle=1)
+
+    # Note that z_boss_sst_colchk has case where _ON is not set, but other flags are still set.
+    def to_c(self):
+        flagList = []
+        flagList.append("AC_ON") if self.enable else None
+        flagList.append("AC_HARD") if self.attacksBounceOff else None
+        if self.hurtByPlayer and self.hurtByEnemy and self.hurtByOther:
+            flagList.append("AC_TYPE_ALL")
+        else:
+            flagList.append("AC_TYPE_PLAYER") if self.hurtByPlayer else None
+            flagList.append("AC_TYPE_ENEMY") if self.hurtByEnemy else None
+            flagList.append("AC_TYPE_OTHER") if self.hurtByOther else None
+        flagList.append("AC_NO_DAMAGE") if self.noDamage else None
+
+        flagList = ["AC_NONE"] if len(flagList) == 0 else flagList
+
+        return " | ".join(flagList)
 
 
 class OOTColliderLayers(bpy.types.PropertyGroup):
@@ -253,6 +322,38 @@ class OOTColliderPhysicsProperty(bpy.types.PropertyGroup):
             row.prop(self, "unk1")
             row.prop(self, "unk2")
 
+    # Note that z_boss_sst_colchk has case where _ON is not set, but other flags are still set.
+    def to_c_1(self):
+        flagList = []
+        flagList.append("OC1_ON") if self.enable else None
+        flagList.append("OC1_NO_PUSH") if self.noPush else None
+        if self.collidesWith.player and self.collidesWith.type1 and self.collidesWith.type2:
+            flagList.append("OC1_TYPE_ALL")
+        else:
+            flagList.append("OC1_TYPE_PLAYER") if self.collidesWith.player else None
+            flagList.append("OC1_TYPE_1") if self.collidesWith.type1 else None
+            flagList.append("OC1_TYPE_2") if self.collidesWith.type2 else None
+
+        flagList = ["OC1_NONE"] if len(flagList) == 0 else flagList
+
+        return " | ".join(flagList)
+
+    # Note that z_boss_sst_colchk has case where _ON is not set, but other flags are still set.
+    def to_c_2(self):
+        flagList = []
+        flagList.append("OC2_UNK1") if self.unk1 else None
+        flagList.append("OC2_UNK2") if self.unk2 else None
+
+        flagList.append("OC2_TYPE_PLAYER") if self.isCollider.player else None
+        flagList.append("OC2_TYPE_1") if self.isCollider.type1 else None
+        flagList.append("OC2_TYPE_2") if self.isCollider.type2 else None
+
+        flagList.append("OC2_FIRST_ONLY") if self.skipHurtboxCheck else None
+
+        flagList = ["OC2_NONE"] if len(flagList) == 0 else flagList
+
+        return " | ".join(flagList)
+
 
 # Touch
 class OOTColliderHitboxItemProperty(bpy.types.PropertyGroup):
@@ -260,11 +361,13 @@ class OOTColliderHitboxItemProperty(bpy.types.PropertyGroup):
     enable: bpy.props.BoolProperty(name="Touch")
     soundEffect: bpy.props.EnumProperty(name="Sound Effect", items=ootEnumHitboxSound)
     drawHitmarksForEveryCollision: bpy.props.BoolProperty(name="Draw Hitmarks For Every Collision")
+    closestBumper: bpy.props.BoolProperty(name="Only Collide With Closest Bumper (Quads)")
 
     # ColliderTouch
     damageFlags: bpy.props.PointerProperty(type=OOTDamageFlagsProperty, name="Damage Flags")
     effect: bpy.props.IntProperty(min=0, max=255, name="Effect")
     damage: bpy.props.IntProperty(min=0, max=255, name="Damage")
+    unk7: bpy.props.BoolProperty(name="Unknown 7")
 
     def draw(self, layout: bpy.types.UILayout):
         layout = layout.box().column()
@@ -272,9 +375,37 @@ class OOTColliderHitboxItemProperty(bpy.types.PropertyGroup):
         if self.enable:
             prop_split(layout, self, "soundEffect", "Sound Effect")
             layout.prop(self, "drawHitmarksForEveryCollision")
+            layout.prop(self, "closestBumper")
+            layout.prop(self, "unk7")
             prop_split(layout, self, "effect", "Effect")
             prop_split(layout, self, "damage", "Damage")
             self.damageFlags.draw(layout)
+
+    # Note that z_boss_sst_colchk has case where _ON is not set, but other flags are still set.
+    def to_c_flags(self):
+        flagList = []
+        flagList.append("TOUCH_ON") if self.enable else None
+        flagList.append("TOUCH_NEAREST") if self.closestBumper else None
+        flagList.append(self.soundEffect)
+
+        flagList.append("TOUCH_AT_HITMARK") if self.drawHitmarksForEveryCollision else None
+        flagList.append("TOUCH_UNK7") if self.unk7 else None
+
+        # note that TOUCH_SFX_NORMAL is the same as 0, but since it is an enum it would usually be included anyway
+        flagList = (
+            ["TOUCH_NONE"]
+            if len(flagList) == 0 or (len(flagList) == 1 and flagList[0] == "TOUCH_SFX_NORMAL")
+            else flagList
+        )
+
+        return " | ".join(flagList)
+
+    def to_c_damage_flags(self):
+        flagList = [self.damageFlags.to_c()]
+        flagList.append(format(self.effect, "#04x"))
+        flagList.append(format(self.damage, "#04x"))
+
+        return "{ " + ", ".join(flagList) + " }"
 
 
 # Bump
@@ -306,17 +437,48 @@ class OOTColliderHurtboxItemProperty(bpy.types.PropertyGroup):
             prop_split(layout, self, "defense", "Defense")
             self.damageFlags.draw(layout)
 
+    # Note that z_boss_sst_colchk has case where _ON is not set, but other flags are still set.
+    def to_c_flags(self):
+        flagList = []
+        flagList.append("BUMP_ON") if self.enable else None
+        flagList.append("BUMP_HOOKABLE") if self.hookable else None
+        flagList.append("BUMP_NO_AT_INFO") if not self.giveInfoToHit else None
+        flagList.append("BUMP_NO_DAMAGE") if not self.takesDamage else None
+        flagList.append("BUMP_NO_SWORD_SFX") if not self.hasSound else None
+        flagList.append("BUMP_NO_HITMARK") if not self.hasHitmark else None
+        flagList.append("BUMP_DRAW_HITMARK") if self.hookable else None
+
+        flagList = ["BUMP_NONE"] if len(flagList) == 0 else flagList
+
+        return " | ".join(flagList)
+
+    def to_c_damage_flags(self):
+        flagList = [self.damageFlags.to_c()]
+        flagList.append(format(self.effect, "#04x"))
+        flagList.append(format(self.defense, "#04x"))
+
+        return "{ " + ", ".join(flagList) + " }"
+
 
 # OCElem
 class OOTColliderPhysicsItemProperty(bpy.types.PropertyGroup):
     enable: bpy.props.BoolProperty(name="Object Element")
-    toggleUnk3: bpy.props.BoolProperty(name="Unknown Toggle", default=False)
+    unk3: bpy.props.BoolProperty(name="Unknown 3", default=False)
 
     def draw(self, layout: bpy.types.UILayout):
         layout = layout.box().column()
         layout.prop(self, "enable")
         if self.enable:
-            layout.prop(self, "toggleUnk3")
+            layout.prop(self, "unk3")
+
+    def to_c_flags(self):
+        if not self.enable:
+            return "OCELEM_NONE"
+
+        flagList = ["OCELEM_ON"]
+        flagList.append("OCELEM_UNK3") if self.unk3 else None
+
+        return " | ".join(flagList)
 
 
 # ColliderInit is for entire collection.
@@ -338,18 +500,20 @@ class OOTActorColliderProperty(bpy.types.PropertyGroup):
     name: bpy.props.StringProperty(name="Struct Name", default="sColliderInit")
 
     def draw(self, obj: bpy.types.Object, layout: bpy.types.UILayout):
-        prop_split(layout, self, "name", "Struct Name")
         if obj.ootActorCollider.colliderShape == "COLSHAPE_JNTSPH":
             armatureObj = obj.parent
             if obj.parent is not None and isinstance(obj.parent.data, bpy.types.Armature) and obj.parent_bone != "":
+                collider = armatureObj.ootActorCollider
                 layout.label(text="Armature Specific", icon="INFO")
-                prop_split(layout, armatureObj.ootActorCollider, "colliderType", "Collider Type")
-                armatureObj.ootActorCollider.hitbox.draw(layout)
-                armatureObj.ootActorCollider.hurtbox.draw(layout)
-                armatureObj.ootActorCollider.physics.draw(layout)
+                prop_split(layout, collider, "name", "Struct Name")
+                prop_split(layout, collider, "colliderType", "Collider Type")
+                collider.hitbox.draw(layout)
+                collider.hurtbox.draw(layout)
+                collider.physics.draw(layout)
             else:
                 layout.label(text="Joint sphere colliders must be parented to a bone in an armature.", icon="ERROR")
         else:
+            prop_split(layout, self, "name", "Struct Name")
             if obj.ootActorCollider.colliderShape == "COLSHAPE_QUAD":
                 layout.label(text="Geometry is ignored and zeroed.", icon="INFO")
                 layout.label(text="Only properties are exported.")
@@ -357,6 +521,25 @@ class OOTActorColliderProperty(bpy.types.PropertyGroup):
             self.hitbox.draw(layout)
             self.hurtbox.draw(layout)
             self.physics.draw(layout)
+
+    def to_c(self, tabDepth: int):
+        indent = "\t" * tabDepth
+        nextIndent = "\t" * (tabDepth + 1)
+
+        physics2 = f"{nextIndent}{self.physics.to_c_2()},\n" if not self.physics.isType1 else ""
+
+        data = (
+            f"{indent}{{\n"
+            f"{nextIndent}{self.colliderType},\n"
+            f"{nextIndent}{self.hitbox.to_c()},\n"
+            f"{nextIndent}{self.hurtbox.to_c()},\n"
+            f"{nextIndent}{self.physics.to_c_1()},\n"
+            f"{physics2}"
+            f"{nextIndent}{self.colliderShape},\n"
+            f"{indent}}},\n"
+        )
+
+        return data
 
 
 class OOTActorColliderItemProperty(bpy.types.PropertyGroup):
@@ -385,6 +568,23 @@ class OOTActorColliderItemProperty(bpy.types.PropertyGroup):
             self.touch.draw(layout)
             self.bump.draw(layout)
             self.objectElem.draw(layout)
+
+    def to_c(self, tabDepth: int):
+        indent = "\t" * tabDepth
+        nextIndent = "\t" * (tabDepth + 1)
+
+        data = (
+            f"{indent}{{\n"
+            f"{nextIndent}{self.element},\n"
+            f"{nextIndent}{self.touch.to_c_damage_flags()},\n"
+            f"{nextIndent}{self.bump.to_c_damage_flags()},\n"
+            f"{nextIndent}{self.touch.to_c_flags()},\n"
+            f"{nextIndent}{self.bump.to_c_flags()},\n"
+            f"{nextIndent}{self.objectElem.to_c_flags()},\n"
+            f"{indent}}},\n"
+        )
+
+        return data
 
 
 class OOT_ActorColliderPanel(bpy.types.Panel):
@@ -556,9 +756,6 @@ def addCollider(shapeName: str) -> bpy.types.Object:
 
     if shapeName == "COLSHAPE_CYLINDER":
         planeObj.lock_location = (True, True, False)
-        planeObj.lock_rotation = (True, True, True)
-    elif shapeName == "COLSHAPE_TRIS":
-        planeObj.lock_location = (True, True, True)
         planeObj.lock_rotation = (True, True, True)
 
     actorCollider = planeObj.ootActorCollider

@@ -10,4 +10,4 @@ from .oot_actor_collider_properties import (
 )
 
 from .oot_actor_collider_import import parseColliderData
-from .oot_actor_collider_export import writeColliderData
+from .oot_actor_collider_export import getColliderData
