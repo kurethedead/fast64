@@ -512,13 +512,16 @@ class OOT_ExportDL(bpy.types.Operator):
         obj = None
         if context.mode != "OBJECT":
             bpy.ops.object.mode_set(mode="OBJECT")
-        if len(context.selected_objects) == 0:
-            raise PluginError("Mesh not selected.")
-        obj = context.active_object
-        if type(obj.data) is not bpy.types.Mesh:
-            raise PluginError("Mesh not selected.")
 
         try:
+            if len(context.selected_objects) == 0:
+                raise PluginError("Mesh not selected.")
+            obj = context.active_object
+            if type(obj.data) is not bpy.types.Mesh:
+                raise PluginError("Mesh not selected.")
+            if obj.ootGeometryType == "Actor Collider":
+                raise PluginError("Selected object is an actor collider.")
+
             settings = bpy.context.scene.ootDLExportSettings
             ootConvertMeshToC(obj, settings)
 
@@ -552,7 +555,7 @@ class OOT_ExportDLPanel(OOT_Panel):
             if settings.is2DArray:
                 box = col.box().column()
                 prop_split(box, settings, "arrayIndex2D", "Flipbook Index")
-        settings.handleColliders.draw(col, "Export Actor Colliders")
+        settings.handleColliders.draw(col, "Export Actor Colliders", False)
         prop_split(col, settings, "drawLayer", "Export Draw Layer")
         col.prop(settings, "useCustomPath")
         col.prop(settings, "removeVanillaData")
@@ -573,7 +576,7 @@ class OOT_ExportDLPanel(OOT_Panel):
             if settings.is2DArray:
                 box = col.box().column()
                 prop_split(box, settings, "arrayIndex2D", "Flipbook Index")
-            settings.handleColliders.draw(col, "Import Actor Colliders")
+            settings.handleColliders.draw(col, "Import Actor Colliders", True)
         prop_split(col, settings, "drawLayer", "Import Draw Layer")
 
         col.prop(settings, "useCustomPath")

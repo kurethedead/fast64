@@ -225,7 +225,9 @@ def parseColliderData(
         parseCylinderColliders(actorData, parentObj, geometryName, filterNameFunc)
 
     if colliderSettings.jointSphere:
-        parseJointSphereColliders(actorData, parentObj, geometryName, filterNameFunc)
+        parseJointSphereColliders(
+            actorData, parentObj, geometryName, filterNameFunc, colliderSettings.parentJointSpheresToBone
+        )
 
     if colliderSettings.mesh:
         parseMeshColliders(actorData, parentObj, geometryName, filterNameFunc)
@@ -309,7 +311,11 @@ def parseCylinderColliders(
 
 
 def parseJointSphereColliders(
-    data: str, parentObj: bpy.types.Object, geometryName: str | None, filterNameFunc: Callable[[str, str], bool]
+    data: str,
+    parentObj: bpy.types.Object,
+    geometryName: str | None,
+    filterNameFunc: Callable[[str, str], bool],
+    parentToBones: bool,
 ):
     handledColliders = []
     for match in re.finditer(
@@ -339,10 +345,12 @@ def parseJointSphereColliders(
         parentObj.ootActorCollider.name = name
 
         parseColliderInit(dataList, parentObj.ootActorCollider)
-        parseJointSphereCollidersItems(data, parentObj, itemsName, name)
+        parseJointSphereCollidersItems(data, parentObj, itemsName, name, parentToBones)
 
 
-def parseJointSphereCollidersItems(data: str, parentObj: bpy.types.Object, itemsName: str, name: str):
+def parseJointSphereCollidersItems(
+    data: str, parentObj: bpy.types.Object, itemsName: str, name: str, parentToBones: bool
+):
     match = re.search(
         r"ColliderJntSphElementInit\s*" + re.escape(itemsName) + r"\s*\[\s*[0-9A-Fa-fx]*\s*\]\s*=\s*\{(.*?)\}\s*;",
         data,
@@ -358,7 +366,12 @@ def parseJointSphereCollidersItems(data: str, parentObj: bpy.types.Object, items
     if len(dataList) % 16 != 0:
         raise PluginError(f"{itemsName} has unexpected struct format.")
 
-    boneList = getOrderedBoneList(parentObj)
+    willParentToBones = isinstance(parentObj.data, bpy.types.Armature) and parentToBones
+
+    if willParentToBones:
+        boneList = getOrderedBoneList(parentObj)
+    else:
+        boneList = None
 
     count = int(round(len(dataList) / 16))
     for item in [dataList[16 * i : 16 * (i + 1)] for i in range(count)]:
@@ -371,20 +384,26 @@ def parseJointSphereCollidersItems(data: str, parentObj: bpy.types.Object, items
         limb = hexOrDecInt(item[10]) - 1
 
         location = mathutils.Vector(
-            [hexOrDecInt(value) / (getOOTScale(parentObj.ootActorScale)) for value in item[11:14]]
+            [hexOrDecInt(value) / ((getOOTScale(parentObj.ootActorScale))) for value in item[11:14]]
         )
         radius = hexOrDecInt(item[14]) / bpy.context.scene.ootBlenderScale
         scale = hexOrDecInt(item[15]) / 100  # code defined constant
 
-        obj = addColliderThenParent("COLSHAPE_JNTSPH", parentObj, boneList[limb])
+        obj = addColliderThenParent("COLSHAPE_JNTSPH", parentObj, boneList[limb] if willParentToBones else None)
         parseColliderInfoInit(item, obj.ootActorColliderItem, 0)
 
         yUpToZUp = mathutils.Quaternion((1, 0, 0), math.radians(90.0))
-        obj.matrix_world = (
-            parentObj.matrix_world
-            @ parentObj.pose.bones[boneList[limb].name].matrix
-            @ mathutils.Matrix.Translation(location)
-        )
+
+        if willParentToBones:
+            obj.matrix_world = (
+                parentObj.matrix_world
+                @ parentObj.pose.bones[boneList[limb].name].matrix
+                @ mathutils.Matrix.Translation(location)
+            )
+        else:
+            obj.matrix_local = mathutils.Matrix.Translation(yUpToZUp @ location)
+            obj.ootActorColliderItem.limbOverride = hexOrDecInt(item[10])
+
         obj.scale.x = radius * scale
         obj.scale.y = radius * scale
         obj.scale.z = radius * scale

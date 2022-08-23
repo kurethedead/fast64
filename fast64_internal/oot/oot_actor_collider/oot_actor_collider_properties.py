@@ -20,8 +20,9 @@ class OOTActorColliderImportExportSettings(bpy.types.PropertyGroup):
     cylinder: bpy.props.BoolProperty(name="Cylinder", default=True)
     mesh: bpy.props.BoolProperty(name="Mesh", default=True)
     quad: bpy.props.BoolProperty(name="Quad", default=True)
+    parentJointSpheresToBone: bpy.props.BoolProperty(name="Parent Joint Spheres To Bones", default=True)
 
-    def draw(self, layout: bpy.types.UILayout, title: str):
+    def draw(self, layout: bpy.types.UILayout, title: str, isImport: bool):
         col = layout.column()
         col.prop(self, "enable", text=title)
         if self.enable:
@@ -33,6 +34,9 @@ class OOTActorColliderImportExportSettings(bpy.types.PropertyGroup):
             row.prop(self, "cylinder", text="Cylinder", toggle=1)
             row.prop(self, "mesh", text="Mesh", toggle=1)
             row.prop(self, "quad", text="Quad", toggle=1)
+
+            if isImport:
+                col.prop(self, "parentJointSpheresToBone")
 
         return col
 
@@ -501,17 +505,17 @@ class OOTActorColliderProperty(bpy.types.PropertyGroup):
 
     def draw(self, obj: bpy.types.Object, layout: bpy.types.UILayout):
         if obj.ootActorCollider.colliderShape == "COLSHAPE_JNTSPH":
-            armatureObj = obj.parent
-            if obj.parent is not None and isinstance(obj.parent.data, bpy.types.Armature) and obj.parent_bone != "":
-                collider = armatureObj.ootActorCollider
-                layout.label(text="Armature Specific", icon="INFO")
+            if obj.parent is not None:
+                collider = obj.parent.ootActorCollider
+                layout.label(text="Joint Shared", icon="INFO")
                 prop_split(layout, collider, "name", "Struct Name")
                 prop_split(layout, collider, "colliderType", "Collider Type")
                 collider.hitbox.draw(layout)
                 collider.hurtbox.draw(layout)
                 collider.physics.draw(layout)
             else:
-                layout.label(text="Joint sphere colliders must be parented to a bone in an armature.", icon="ERROR")
+                layout.label(text="Joint sphere colliders must be parented to a bone or object.", icon="ERROR")
+
         else:
             prop_split(layout, self, "name", "Struct Name")
             if obj.ootActorCollider.colliderShape == "COLSHAPE_QUAD":
@@ -545,18 +549,19 @@ class OOTActorColliderProperty(bpy.types.PropertyGroup):
 class OOTActorColliderItemProperty(bpy.types.PropertyGroup):
     # ColliderInfoInit
     element: bpy.props.EnumProperty(items=ootEnumColliderElement, name="Element Type")
+    limbOverride: bpy.props.IntProperty(min=0, max=256, name="Limb Index")
     touch: bpy.props.PointerProperty(type=OOTColliderHitboxItemProperty, name="Touch")
     bump: bpy.props.PointerProperty(type=OOTColliderHurtboxItemProperty, name="Bump")
     objectElem: bpy.props.PointerProperty(type=OOTColliderPhysicsItemProperty, name="Object Element")
 
+    # obj is None when using mesh collider, where property is on material
     def draw(self, obj: bpy.types.Object | None, layout: bpy.types.UILayout):
         if obj is not None and obj.ootActorCollider.colliderShape == "COLSHAPE_JNTSPH":
-            armatureObj = obj.parent
-            if obj.parent is not None and isinstance(obj.parent.data, bpy.types.Armature) and obj.parent_bone != "":
-                layout = layout.column()
-                layout.label(text="Joint Specific", icon="INFO")
-            else:
-                return
+            layout.label(text="Joint Specific", icon="INFO")
+            if not (
+                obj.parent is not None and isinstance(obj.parent.data, bpy.types.Armature) and obj.parent_bone != ""
+            ):
+                prop_split(layout, self, "limbOverride", "Limb Index")
 
         if obj is not None and obj.ootActorCollider.colliderShape == "COLSHAPE_TRIS":
             layout = layout.column()
@@ -641,6 +646,7 @@ class OOT_AddActorCollider(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO", "PRESET"}
 
     shape: bpy.props.EnumProperty(items=ootEnumColliderShape)
+    parentToBone: bpy.props.BoolProperty(default=False)
 
     def execute(self, context):
         try:
@@ -654,17 +660,17 @@ class OOT_AddActorCollider(bpy.types.Operator):
                 bpy.ops.object.mode_set(mode="OBJECT")
             bpy.ops.object.select_all(action="DESELECT")
 
-            if self.shape == "COLSHAPE_JNTSPH":
+            if self.parentToBone and self.shape == "COLSHAPE_JNTSPH":
                 if isinstance(activeObj.data, bpy.types.Armature):
                     selectedBones = [bone for bone in activeObj.data.bones if bone.select]
                     if len(selectedBones) == 0:
                         raise PluginError("Cannot add joint spheres since no bones are selected on armature.")
                     for bone in selectedBones:
-                        addColliderThenParent(self.shape, activeObj, bone)
+                        addColliderThenParent(self.shape, activeObj, bone, self.shape != "COLSHAPE_TRIS")
                 else:
-                    raise PluginError("Cannot add joint spheres to non armature object.")
+                    raise PluginError("Non armature object selected.")
             else:
-                addColliderThenParent(self.shape, activeObj, None)
+                addColliderThenParent(self.shape, activeObj, None, self.shape != "COLSHAPE_TRIS")
 
         except Exception as e:
             raisePluginError(self, e)
@@ -722,8 +728,10 @@ class OOT_CopyColliderProperties(bpy.types.Operator):
         return {"FINISHED"}
 
 
-def addColliderThenParent(shapeName: str, obj: bpy.types.Object, bone: bpy.types.Bone | None) -> bpy.types.Object:
-    colliderObj = addCollider(shapeName)
+def addColliderThenParent(
+    shapeName: str, obj: bpy.types.Object, bone: bpy.types.Bone | None, notMeshCollider: bool = True
+) -> bpy.types.Object:
+    colliderObj = addCollider(shapeName, notMeshCollider)
     if bone is not None:
 
         # If no active bone is set, then parenting operator fails.
@@ -735,12 +743,13 @@ def addColliderThenParent(shapeName: str, obj: bpy.types.Object, bone: bpy.types
         colliderObj.matrix_world = obj.matrix_world @ obj.pose.bones[bone.name].matrix
     else:
         parentObject(obj, colliderObj)
-        colliderObj.matrix_local = mathutils.Matrix.Identity(4)
+        # 10 = default value for ootBlenderScale
+        colliderObj.matrix_local = mathutils.Matrix.Diagonal(colliderObj.matrix_local.decompose()[2].to_4d())
     updateColliderOnObj(colliderObj)
     return colliderObj
 
 
-def addCollider(shapeName: str) -> bpy.types.Object:
+def addCollider(shapeName: str, notMeshCollider: bool) -> bpy.types.Object:
     link_oot_collider_library()
     if bpy.context.mode != "OBJECT":
         bpy.ops.object.mode_set(mode="OBJECT")
@@ -750,9 +759,18 @@ def addCollider(shapeName: str) -> bpy.types.Object:
     location = mathutils.Vector(bpy.context.scene.cursor.location)
     bpy.ops.mesh.primitive_plane_add(size=2, enter_editmode=False, align="WORLD", location=location[:])
     planeObj = bpy.context.view_layer.objects.active
-    planeObj.data.clear_geometry()
+    if notMeshCollider:
+        planeObj.data.clear_geometry()
+    else:
+        material = bpy.data.materials.new(f"Mesh Collider Material")
+        planeObj.data.materials.append(material)
     planeObj.name = "Collider"
     planeObj.ootGeometryType = "Actor Collider"
+
+    # 10 = default value for ootBlenderScale
+    planeObj.scale.x = 10 / bpy.context.scene.ootBlenderScale
+    planeObj.scale.y = 10 / bpy.context.scene.ootBlenderScale
+    planeObj.scale.z = 10 / bpy.context.scene.ootBlenderScale
 
     if shapeName == "COLSHAPE_CYLINDER":
         planeObj.lock_location = (True, True, False)

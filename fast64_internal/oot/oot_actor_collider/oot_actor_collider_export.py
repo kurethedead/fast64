@@ -26,35 +26,43 @@ def getColliderData(parentObj: bpy.types.Object) -> CData:
 
     data = CData()
     data.source += getColliderDataSingle(colliderObjs, "COLSHAPE_CYLINDER", "ColliderCylinderInit")
-    data.source += getColliderDataJointSphere(colliderObjs, parentObj)
+    data.source += getColliderDataJointSphere(colliderObjs)
     data.source += getColliderDataMesh(colliderObjs)
     data.source += getColliderDataSingle(colliderObjs, "COLSHAPE_QUAD", "ColliderQuadInit")
 
     return data
 
 
-def getShapeData(
-    obj: bpy.types.Object, parentObj: bpy.types.Object | None = None, bone: bpy.types.Bone | None = None
-) -> str:
+def getShapeData(obj: bpy.types.Object, bone: bpy.types.Bone | None = None) -> str:
     shape = obj.ootActorCollider.colliderShape
     translate, rotate, scale = obj.matrix_local.decompose()
     yUpToZUp = mathutils.Quaternion((1, 0, 0), math.radians(90.0))
 
     if shape == "COLSHAPE_JNTSPH":
+        if obj.parent is None:
+            raise PluginError(f"Joint sphere collider {obj.name} must be parented to a mesh or armature.")
+
         isUniform = abs(scale[0] - scale[1]) < 0.001 and abs(scale[1] - scale[2]) < 0.001
         if not isUniform:
             raise PluginError(f"Sphere collider {obj.name} must have uniform scale (radius).")
 
-        boneList = getOrderedBoneList(parentObj)
-        limb = boneList.index(bone) + 1
+        if isinstance(obj.parent.data, bpy.types.Armature) and bone is not None:
+            boneList = getOrderedBoneList(obj.parent)
+            limb = boneList.index(bone) + 1
+        else:
+            limb = obj.ootActorColliderItem.limbOverride
 
         # When object is parented to bone, its matrix_local is relative to the tail(?) of that bone.
         # No need to apply yUpToZUp here?
         translateData = ", ".join(
             [
                 str(round(value))
-                for value in getOOTScale(parentObj.ootActorScale)
-                * (translate - (mathutils.Vector(bone.head) - mathutils.Vector(bone.tail)))
+                for value in getOOTScale(obj.parent.ootActorScale)
+                * (
+                    (translate - (mathutils.Vector(bone.head) - mathutils.Vector(bone.tail)))
+                    if bone is not None
+                    else translate
+                )
             ]
         )
         scale = bpy.context.scene.ootBlenderScale * scale
@@ -104,31 +112,34 @@ def getColliderDataSingle(colliderObjs: list[bpy.types.Object], shape: str, stru
     return colliderData
 
 
-def getColliderDataJointSphere(colliderObjs: list[bpy.types.Object], armatureObj: bpy.types.Object) -> str:
-    sphereObjs = [obj for obj in colliderObjs if obj.ootActorCollider.colliderShape == "COLSHAPE_JNTSPH"]
-    collider = armatureObj.ootActorCollider
+def getColliderDataJointSphere(colliderObjs: list[bpy.types.Object]) -> str:
+    sphereObjs = [
+        obj
+        for obj in colliderObjs
+        if obj.ootActorCollider.colliderShape == "COLSHAPE_JNTSPH" and obj.parent is not None
+    ]
+    if len(sphereObjs) == 0:
+        return ""
+
+    collider = sphereObjs[0].parent.ootActorCollider
     name = collider.name
     elementsName = collider.name + "Items"
     colliderData = ""
 
-    if len(sphereObjs) == 0:
-        return ""
-
     colliderData += f"static ColliderJntSphElementInit {elementsName}[{len(sphereObjs)}] = {{\n"
     for obj in sphereObjs:
-        if obj.parent_bone == "":
-            raise PluginError(f"Sphere collider {obj.name} must be parented to a bone in an armature.")
-        bone = armatureObj.data.bones[obj.parent_bone]
+        if obj.parent is not None and isinstance(obj.parent.data, bpy.types.Armature) and obj.parent_bone != "":
+            bone = obj.parent.data.bones[obj.parent_bone]
+        else:
+            bone = None
 
         data = "\t{\n"
         data += obj.ootActorColliderItem.to_c(2)
-        data += "\t\t" + getShapeData(obj, armatureObj, bone)
+        data += "\t\t" + getShapeData(obj, bone)
         data += "\t},\n"
 
         colliderData += data
     colliderData += "};\n\n"
-
-    collider = armatureObj.ootActorCollider
 
     # Required to make export use correct shape, otherwise unused so not an issue modifying here
     collider.shape = "COLSHAPE_JNTSPH"

@@ -1099,7 +1099,7 @@ class OOT_ExportSkeletonPanel(OOT_Panel):
                     elif settings.arrayIndex2D == 1:
                         box.label(text="Child Link", icon="OPTIONS")
                     box.label(text="Requires enabling NON_MATCHING in Makefile.", icon="ERROR")
-        settings.handleColliders.draw(col, "Export Actor Colliders")
+        settings.handleColliders.draw(col, "Export Actor Colliders", False)
         col.prop(settings, "useCustomPath")
         col.prop(settings, "removeVanillaData")
         col.prop(settings, "optimize")
@@ -1121,7 +1121,7 @@ class OOT_ExportSkeletonPanel(OOT_Panel):
             col.prop(settings, "autoDetectActorScale")
             if not settings.autoDetectActorScale:
                 prop_split(col, settings, "actorScale", "Actor Scale")
-            settings.handleColliders.draw(col, "Import Actor Colliders")
+            settings.handleColliders.draw(col, "Import Actor Colliders", True)
             col.prop(settings, "isLink")
             if not settings.isLink:
                 col.prop(settings, "is2DArray")

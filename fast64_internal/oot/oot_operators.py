@@ -175,7 +175,13 @@ class OOT_OperatorsPanel(OOT_Panel):
 
         col.label(text="")
         col.label(text="Actor Colliders")
-        col.operator(OOT_AddActorCollider.bl_idname, text="Add Joint Sphere Colliders").shape = "COLSHAPE_JNTSPH"
+        addOp = col.operator(OOT_AddActorCollider.bl_idname, text="Add Joint Sphere Collider (Bones)")
+        addOp.shape = "COLSHAPE_JNTSPH"
+        addOp.parentToBone = True
+
+        col.operator(
+            OOT_AddActorCollider.bl_idname, text="Add Joint Sphere Collider (Object)"
+        ).shape = "COLSHAPE_JNTSPH"
         col.operator(OOT_AddActorCollider.bl_idname, text="Add Cylinder Collider").shape = "COLSHAPE_CYLINDER"
         col.operator(OOT_AddActorCollider.bl_idname, text="Add Mesh Collider").shape = "COLSHAPE_TRIS"
         col.operator(OOT_AddActorCollider.bl_idname, text="Add Quad Collider (Properties Only)").shape = "COLSHAPE_QUAD"
