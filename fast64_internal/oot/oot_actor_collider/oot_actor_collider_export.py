@@ -38,14 +38,12 @@ def getShapeData(
 ) -> str:
     shape = obj.ootActorCollider.colliderShape
     translate, rotate, scale = obj.matrix_local.decompose()
-    isUniform = abs(scale[0] - scale[1]) < 0.001 and abs(scale[1] - scale[2]) < 0.001
-    isUniformXY = abs(scale[0] - scale[1]) < 0.001
     yUpToZUp = mathutils.Quaternion((1, 0, 0), math.radians(90.0))
 
-    # Maybe redo this code structure here
     if shape == "COLSHAPE_JNTSPH":
+        isUniform = abs(scale[0] - scale[1]) < 0.001 and abs(scale[1] - scale[2]) < 0.001
         if not isUniform:
-            raise PluginError("Cylinder collider must have uniform scale (radius).")
+            raise PluginError(f"Sphere collider {obj.name} must have uniform scale (radius).")
 
         boneList = getOrderedBoneList(parentObj)
         limb = boneList.index(bone) + 1
@@ -69,8 +67,9 @@ def getShapeData(
         translate = bpy.context.scene.ootBlenderScale * (yUpToZUp.inverted() @ translate)
         scale = bpy.context.scene.ootBlenderScale * (yUpToZUp.inverted() @ scale)
 
+        isUniformXY = abs(scale[0] - scale[1]) < 0.001
         if not isUniformXY:
-            raise PluginError("Cylinder collider must have uniform XY scale (radius).")
+            raise PluginError(f"Cylinder collider {obj.name} must have uniform XY scale (radius).")
         radius = round(abs(scale[0]))
         height = round(abs(scale[1] * 2))
 
@@ -80,11 +79,12 @@ def getShapeData(
         return f"{{ {radius}, {height}, {yShift}, {{ {position[0]}, {position[1]}, {position[2]} }} }},\n"
 
     elif shape == "COLSHAPE_TRIS":
-        pass
+        pass  # handled in its own function
     elif shape == "COLSHAPE_QUAD":
+        # geometry data ignored
         return "{ { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } } },\n"
     else:
-        raise PluginError(f"Invalid shape: {shape}")
+        raise PluginError(f"Invalid shape: {shape} for {obj.name}")
 
 
 def getColliderDataSingle(colliderObjs: list[bpy.types.Object], shape: str, structName: str) -> str:
