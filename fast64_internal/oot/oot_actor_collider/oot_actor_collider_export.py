@@ -75,6 +75,7 @@ def getShapeData(obj: bpy.types.Object, bone: bpy.types.Bone | None = None) -> s
     shape = obj.ootActorCollider.colliderShape
     translate, rotate, scale = obj.matrix_local.decompose()
     yUpToZUp = mathutils.Quaternion((1, 0, 0), math.radians(90.0))
+    noXYRotation = rotate.to_euler()[0] < 0.01 and rotate.to_euler()[1] < 0.01
 
     if shape == "COLSHAPE_JNTSPH":
         if obj.parent is None:
@@ -105,6 +106,9 @@ def getShapeData(obj: bpy.types.Object, bone: bpy.types.Bone | None = None) -> s
         return f"{{ {limb}, {{ {{ {translateData} }} , {radius} }}, 100 }},\n"
 
     elif shape == "COLSHAPE_CYLINDER":
+        if not noXYRotation:
+            raise PluginError(f"Cylinder collider {obj.name} must have zero rotation around XY axis.")
+
         isUniformXY = abs(scale[0] - scale[1]) < 0.001
 
         # Convert to OOT space transforms
@@ -114,7 +118,7 @@ def getShapeData(obj: bpy.types.Object, bone: bpy.types.Bone | None = None) -> s
         if not isUniformXY:
             raise PluginError(f"Cylinder collider {obj.name} must have uniform XY scale (radius).")
         radius = round(abs(scale[0]))
-        height = round(abs(scale[1] * 2))
+        height = round(scale[1] * 2)
 
         yShift = round(translate[1])
         position = [round(translate[0]), 0, round(translate[2])]
