@@ -96,11 +96,7 @@ def getShapeData(obj: bpy.types.Object, bone: bpy.types.Bone | None = None) -> s
             [
                 str(round(value))
                 for value in getOOTScale(obj.parent.ootActorScale)
-                * (
-                    (translate - (mathutils.Vector(bone.head) - mathutils.Vector(bone.tail)))
-                    if bone is not None
-                    else translate
-                )
+                * (translate + (mathutils.Vector((0, bone.length, 0))) if bone is not None else translate)
             ]
         )
         scale = bpy.context.scene.ootBlenderScale * scale
