@@ -7,6 +7,7 @@ from bpy.app.handlers import persistent
 import logging
 from ...f3d.f3d_material import createF3DMat, update_preset_manual
 from ..oot_constants import ootEnumColliderShape, ootEnumColliderType, ootEnumColliderElement, ootEnumHitboxSound
+import math
 
 logging.basicConfig(format="%(asctime)s: %(message)s", datefmt="%m/%d/%Y %I:%M:%S %p")
 logger = logging.getLogger(__name__)
@@ -750,7 +751,6 @@ def addColliderThenParent(
 
 
 def addCollider(shapeName: str, notMeshCollider: bool) -> bpy.types.Object:
-    link_oot_collider_library()
     if bpy.context.mode != "OBJECT":
         bpy.ops.object.mode_set(mode="OBJECT")
         bpy.ops.object.select_all(action="DESELECT")
@@ -767,11 +767,6 @@ def addCollider(shapeName: str, notMeshCollider: bool) -> bpy.types.Object:
     planeObj.name = "Collider"
     planeObj.ootGeometryType = "Actor Collider"
 
-    # 10 = default value for ootBlenderScale
-    planeObj.scale.x = 10 / bpy.context.scene.ootBlenderScale
-    planeObj.scale.y = 10 / bpy.context.scene.ootBlenderScale
-    planeObj.scale.z = 10 / bpy.context.scene.ootBlenderScale
-
     if shapeName == "COLSHAPE_CYLINDER":
         planeObj.lock_location = (True, True, False)
         planeObj.lock_rotation = (True, True, True)
@@ -782,19 +777,87 @@ def addCollider(shapeName: str, notMeshCollider: bool) -> bpy.types.Object:
     return planeObj
 
 
+def getGeometryNodes(shapeName: str):
+    nodesName = shapeNameToBlenderName(shapeName)
+    if nodesName in bpy.data.node_groups:
+        return bpy.data.node_groups[nodesName]
+    else:
+        node_group = bpy.data.node_groups.new(nodesName, "GeometryNodeTree")
+        node_group.use_fake_user = True
+        inNode = node_group.nodes.new("NodeGroupInput")
+        node_group.inputs.new("NodeSocketGeometry", "Geometry")
+        node_group.inputs.new("NodeSocketMaterial", "Material")
+        outNode = node_group.nodes.new("NodeGroupOutput")
+        node_group.outputs.new("NodeSocketGeometry", "Geometry")
+
+        if nodesName == "oot_collider_sphere":
+            # Sphere
+            shape = node_group.nodes.new("GeometryNodeMeshUVSphere")
+            shape.inputs["Segments"].default_value = 16
+            shape.inputs["Rings"].default_value = 8
+            shape.inputs["Radius"].default_value = 1
+
+            # Shade Smooth
+            smooth = node_group.nodes.new("GeometryNodeSetShadeSmooth")
+            node_group.links.new(shape.outputs["Mesh"], smooth.inputs["Geometry"])
+            lastNode = smooth
+
+        elif nodesName == "oot_collider_cylinder":
+
+            # Cylinder
+            shape = node_group.nodes.new("GeometryNodeMeshCylinder")
+            shape.inputs["Vertices"].default_value = 16
+            shape.inputs["Radius"].default_value = 1
+            shape.inputs["Depth"].default_value = 2
+
+            # Shade Smooth
+            smooth = node_group.nodes.new("GeometryNodeSetShadeSmooth")
+            node_group.links.new(shape.outputs["Mesh"], smooth.inputs["Geometry"])
+            node_group.links.new(shape.outputs["Side"], smooth.inputs["Selection"])
+
+            # Transform
+            transform = node_group.nodes.new("GeometryNodeTransform")
+            node_group.links.new(smooth.outputs["Geometry"], transform.inputs["Geometry"])
+            transform.inputs["Translation"].default_value[2] = 1
+            lastNode = transform
+
+        elif nodesName == "oot_collider_triangles":
+            lastNode = inNode
+
+        elif nodesName == "oot_collider_quad":
+            # Grid
+            shape = node_group.nodes.new("GeometryNodeMeshGrid")
+            shape.inputs["Size X"].default_value = 2
+            shape.inputs["Size Y"].default_value = 2
+            shape.inputs["Vertices X"].default_value = 2
+            shape.inputs["Vertices Y"].default_value = 2
+
+            # Transform
+            transform = node_group.nodes.new("GeometryNodeTransform")
+            node_group.links.new(shape.outputs["Mesh"], transform.inputs["Geometry"])
+            transform.inputs["Rotation"].default_value[0] = math.radians(90)
+            lastNode = transform
+
+        else:
+            raise PluginError(f"Could not find node group name: {nodesName}")
+
+        # Set Material
+        setMat = node_group.nodes.new("GeometryNodeSetMaterial")
+        node_group.links.new(lastNode.outputs["Geometry"], setMat.inputs["Geometry"])
+        node_group.links.new(inNode.outputs["Material"], setMat.inputs["Material"])
+        node_group.links.new(setMat.outputs["Geometry"], outNode.inputs["Geometry"])
+
+        return node_group
+
+
 # Apply geometry nodes for the correct collider shape
 def applyColliderGeoNodes(obj: bpy.types.Object, material: bpy.types.Material, shapeName: str) -> None:
-    nodesName = shapeNameToBlenderName(shapeName)
-
-    if nodesName in bpy.data.node_groups:
-        if "Collider Shape" not in obj.modifiers:
-            modifier = obj.modifiers.new("Collider Shape", "NODES")
-        else:
-            modifier = obj.modifiers["Collider Shape"]
-        modifier.node_group = bpy.data.node_groups[nodesName]
-        modifier["Input_2"] = material
+    if "Collider Shape" not in obj.modifiers:
+        modifier = obj.modifiers.new("Collider Shape", "NODES")
     else:
-        raise PluginError(f"Could not find node group name: {nodesName}")
+        modifier = obj.modifiers["Collider Shape"]
+    modifier.node_group = getGeometryNodes(shapeName)
+    modifier["Input_1"] = material
 
 
 # Creates a semi-transparent solid color material (cached)
@@ -811,27 +874,6 @@ def getColliderMat(name: str, color: tuple[float, float, float, float]) -> bpy.t
         return newMat
     else:
         return bpy.data.materials[name]
-
-
-# unused? right now decided to go with regular hiding instead
-def getColliderCollection(shapeName: str | None) -> bpy.types.Collection:
-    if "OOT Colliders" not in bpy.data.collections:
-        colliderCollection = bpy.data.collections.new("OOT Colliders")
-        bpy.context.scene.collection.children.link(colliderCollection)
-    else:
-        colliderCollection = bpy.data.collections["OOT Colliders"]
-
-    if shapeName is None:
-        return colliderCollection
-
-    name = shapeNameToBlenderName(shapeName)
-    if name not in bpy.data.collections:
-        shapeCollection = bpy.data.collections.new(name)
-        colliderCollection.children.link(shapeCollection)
-    else:
-        shapeCollection = bpy.data.collections[name]
-
-    return shapeCollection
 
 
 def shapeNameToBlenderName(shapeName: str) -> str:
@@ -875,56 +917,6 @@ def drawColliderVisibilityOperators(layout: bpy.types.UILayout):
     row.prop(visibilitySettings, "cylinder", text="Cylinder", toggle=1)
     row.prop(visibilitySettings, "mesh", text="Mesh", toggle=1)
     row.prop(visibilitySettings, "quad", text="Quad", toggle=1)
-
-
-@persistent
-def load_handler(dummy):
-    logger.info("Checking for base F3D material library.")
-
-    for lib in bpy.data.libraries:
-        lib_path = bpy.path.abspath(lib.filepath)
-
-        # detect if this is one your addon's libraries here
-        if "oot_collider_library.blend" in lib_path:
-
-            addon_dir = os.path.dirname(os.path.abspath(__file__))
-            new_lib_path = os.path.join(addon_dir, "oot_collider_library.blend")
-
-            if lib_path != new_lib_path:
-                logger.info("Reloading the library: %s : %s => %s" % (lib.name, lib_path, new_lib_path))
-
-                lib.filepath = new_lib_path
-                lib.reload()
-            bpy.context.scene["oot_collider_lib_dir"] = None  # force node reload!
-            link_oot_collider_library()
-
-
-def link_oot_collider_library():
-    dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "oot_collider_library.blend")
-
-    prevMode = bpy.context.mode
-    if prevMode != "OBJECT":
-        bpy.ops.object.mode_set(mode="OBJECT")
-
-    with bpy.data.libraries.load(dir) as (data_from, data_to):
-        dirNode = os.path.join(dir, "NodeTree")
-
-        # linking is SUPER slow, this only links if the scene hasnt been linked yet
-        if bpy.context.scene.get("oot_collider_lib_dir") != dirNode or (
-            "oot_collider_lib_ver" in bpy.context.scene
-            and bpy.context.scene.ootColliderLibVer > bpy.context.scene["oot_collider_lib_ver"]
-        ):
-            for node_group in data_from.node_groups:
-                if node_group is not None:
-                    # append to prevent filepath issues
-                    bpy.ops.wm.link(
-                        filepath=os.path.join(dirNode, node_group), directory=dirNode, filename=node_group, link=False
-                    )
-            bpy.context.scene["oot_collider_lib_dir"] = dirNode
-            bpy.context.scene["oot_collider_lib_ver"] = bpy.context.scene.ootColliderLibVer
-
-
-bpy.app.handlers.load_post.append(load_handler)
 
 
 def updateVisibilityJointSphere(self, context):
