@@ -1159,8 +1159,6 @@ class OOT_ExportSkeletonPanel(OOT_Panel):
         col.prop(settings, "removeDoubles")
         col.prop(settings, "importNormals")
 
-        col.operator(ArmatureApplyWithMesh.bl_idname)
-
 
 class OOT_SkeletonPanel(bpy.types.Panel):
     bl_idname = "OOT_PT_skeleton"

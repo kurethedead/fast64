@@ -174,7 +174,13 @@ class OOT_OperatorsPanel(OOT_Panel):
         col.operator(OOT_AddCutscene.bl_idname)
 
         col.label(text="")
+        col.label(text="Armatures")
+        col.operator(ArmatureApplyWithMesh.bl_idname)
+
+        col.label(text="")
         col.label(text="Actor Colliders")
+        col.label(text="Do not scale armatures with joint sphere colliders.", icon="ERROR")
+        col.label(text="Applying scale will mess up joint sphere translations.")
         addOp = col.operator(OOT_AddActorCollider.bl_idname, text="Add Joint Sphere Collider (Bones)")
         addOp.shape = "COLSHAPE_JNTSPH"
         addOp.parentToBone = True
