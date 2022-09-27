@@ -15,7 +15,6 @@ from .oot_f3d_writer import *
 from .oot_texture_array import ootReadTextureArrays
 from .oot_actor_collider import parseColliderData, getColliderData
 
-
 ootEnumBoneType = [
     ("Default", "Default", "Default"),
     ("Custom DL", "Custom DL", "Custom DL"),
@@ -39,16 +38,16 @@ class OOTSkeletonProperty(bpy.types.PropertyGroup):
 
 class OOTSkeletonImportSettings(bpy.types.PropertyGroup):
     name: bpy.props.StringProperty(name="Skeleton Name", default="gGerudoRedSkel")
-    folderName: bpy.props.StringProperty(name="Skeleton Folder", default="object_geldb")
+    folder: bpy.props.StringProperty(name="Skeleton Folder", default="object_geldb")
+    customPath: bpy.props.StringProperty(name="Custom Skeleton Path", subtype="FILE_PATH")
+    isCustom: bpy.props.BoolProperty(name="Use Custom Path")
+    removeDoubles: bpy.props.BoolProperty(name="Remove Doubles On Import", default=True)
+    importNormals: bpy.props.BoolProperty(name="Import Normals", default=True)
+    drawLayer: bpy.props.EnumProperty(name="Import Draw Layer", items=ootEnumDrawLayers)
     overlay: bpy.props.StringProperty(name="Overlay", default="ovl_En_GeldB")
     isLink: bpy.props.BoolProperty(name="Is Link", default=False)
     is2DArray: bpy.props.BoolProperty(name="Has 2D Flipbook Array", default=False)
     arrayIndex2D: bpy.props.IntProperty(name="Index if 2D Array", default=0, min=0)
-    customPath: bpy.props.StringProperty(name="Custom Skeleton Path", subtype="FILE_PATH")
-    useCustomPath: bpy.props.BoolProperty(name="Use Custom Path")
-    removeDoubles: bpy.props.BoolProperty(name="Remove Doubles On Import", default=True)
-    importNormals: bpy.props.BoolProperty(name="Import Normals", default=True)
-    drawLayer: bpy.props.EnumProperty(name="Import Draw Layer", items=ootEnumDrawLayers)
     handleColliders: bpy.props.PointerProperty(type=OOTActorColliderImportExportSettings)
     autoDetectActorScale: bpy.props.BoolProperty(name="Auto Detect Actor Scale", default=True)
     actorScale: bpy.props.FloatProperty(name="Actor Scale", min=0, default=100)
@@ -56,15 +55,20 @@ class OOTSkeletonImportSettings(bpy.types.PropertyGroup):
 
 class OOTSkeletonExportSettings(bpy.types.PropertyGroup):
     name: bpy.props.StringProperty(name="Skeleton Name", default="gGerudoRedSkel")
-    folderName: bpy.props.StringProperty(name="Skeleton Folder", default="object_geldb")
+    folder: bpy.props.StringProperty(name="Skeleton Folder", default="object_geldb")
+    customPath: bpy.props.StringProperty(name="Custom Skeleton Path", subtype="FILE_PATH")
+    isCustom: bpy.props.BoolProperty(name="Use Custom Path")
+    removeVanillaData: bpy.props.BoolProperty(name="Replace Vanilla Skeletons On Export", default=True)
     overlay: bpy.props.StringProperty(name="Overlay", default="ovl_En_GeldB")
     isLink: bpy.props.BoolProperty(name="Is Link", default=False)
     is2DArray: bpy.props.BoolProperty(name="Has 2D Flipbook Array", default=False)
     arrayIndex2D: bpy.props.IntProperty(name="Index if 2D Array", default=0, min=0)
-    customPath: bpy.props.StringProperty(name="Custom Skeleton Path", subtype="FILE_PATH")
-    useCustomPath: bpy.props.BoolProperty(name="Use Custom Path")
     handleColliders: bpy.props.PointerProperty(type=OOTActorColliderImportExportSettings)
-    removeVanillaData: bpy.props.BoolProperty(name="Replace Vanilla Headers On Export", default=True)
+    customAssetIncludeDir: bpy.props.StringProperty(
+        name="Asset Include Directory",
+        default="assets/objects/object_geldb",
+        description="Used in #include for including image files",
+    )
     optimize: bpy.props.BoolProperty(
         name="Optimize",
         description="Applies various optimizations between the limbs in a skeleton. "
@@ -160,8 +164,21 @@ class OOTSkeleton:
         return limbData
 
 
+class OOTDLReference:
+    def __init__(self, name: str):
+        self.name = name
+
+
 class OOTLimb:
-    def __init__(self, skeletonName, boneName, index, translation, DL, lodDL):
+    def __init__(
+        self,
+        skeletonName: str,
+        boneName: str,
+        index: int,
+        translation: mathutils.Vector,
+        DL: GfxList | OOTDLReference,
+        lodDL: GfxList | OOTDLReference,
+    ):
         self.skeletonName = skeletonName
         self.boneName = boneName
         self.translation = translation
@@ -407,7 +424,14 @@ def ootRemoveRotationsFromBone(armatureObj: bpy.types.Object, bone: bpy.types.Bo
 
 
 def ootConvertArmatureToSkeleton(
-    originalArmatureObj, convertTransformMatrix, fModel, name, convertTextureData, skeletonOnly, drawLayer, optimize
+    originalArmatureObj,
+    convertTransformMatrix,
+    fModel,
+    name,
+    convertTextureData,
+    skeletonOnly,
+    drawLayer,
+    optimize: bool,
 ):
     checkEmptyName(name)
 
@@ -475,7 +499,7 @@ def ootProcessBone(
     skeletonOnly,
     drawLayer,
     lastMaterialName,
-    optimize,
+    optimize: bool,
 ):
     bone = armatureObj.data.bones[boneName]
     if bone.parent is not None:
@@ -526,6 +550,12 @@ def ootProcessBone(
             )
         DL = mesh.draw
 
+    # Some skeletons will override the current drawn DL for a limb.
+    # If an override DL is not NULL but the non-override is NULL, then this causes issues.
+    # Thus for cases where we remove geometry, we need to have a dummy DL.
+    elif bone.use_deform:
+        DL = OOTDLReference("gEmptyDL")
+
     if isinstance(parentLimb, OOTSkeleton):
         skeleton = parentLimb
         limb = OOTLimb(skeleton.name, boneName, nextIndex, translate, DL, None)
@@ -563,13 +593,31 @@ def ootProcessBone(
     return nextIndex, lastMaterialName
 
 
-def ootConvertArmatureToC(originalArmatureObj: bpy.types.Object, settings: OOTSkeletonExportSettings):
-    convertTransformMatrix = mathutils.Matrix.Scale(getOOTScale(originalArmatureObj.ootActorScale), 4)
+def ootConvertArmatureToC(
+    originalArmatureObj: bpy.types.Object,
+    convertTransformMatrix: mathutils.Matrix,
+    f3dType: str,
+    isHWv1: bool,
+    DLFormat: DLFormat,
+    savePNG: bool,
+    drawLayer: str,
+    settings: OOTSkeletonExportSettings,
+):
+    folderName = settings.folder
+    exportPath = bpy.path.abspath(settings.customPath)
+    isCustomExport = settings.isCustom
+    removeVanillaData = settings.removeVanillaData
+    skeletonName = toAlnum(settings.name)
+    optimize = settings.optimize
+    overlayName = settings.overlay if not settings.isCustom else None
+    isLink = settings.isLink
+    is2DArray = settings.is2DArray
+    arrayIndex2D = settings.arrayIndex2D if isLink or is2DArray else None
 
     savePNG = bpy.context.scene.saveTextures or bpy.context.scene.ignoreTextureRestrictions
     exportPath = bpy.path.abspath(settings.customPath)
     drawLayer = originalArmatureObj.ootDrawLayer
-    overlayName = settings.overlay if not settings.useCustomPath else None
+    overlayName = settings.overlay if not settings.isCustom else None
     arrayIndex2D = settings.arrayIndex2D if settings.isLink or settings.is2DArray else None
     optimize = settings.optimize
 
@@ -614,18 +662,22 @@ def ootConvertArmatureToC(originalArmatureObj: bpy.types.Object, settings: OOTSk
 
     data = CData()
     data.source += '#include "ultra64.h"\n#include "global.h"\n'
-    if not settings.useCustomPath:
-        data.source += '#include "' + settings.folderName + '.h"\n\n'
+    if not settings.isCustom:
+        data.source += '#include "' + folderName + '.h"\n\n'
     else:
         data.source += "\n"
 
-    exportData = fModel.to_c(TextureExportSettings(False, savePNG, "test"), OOTGfxFormatter(ScrollMethod.Vertex))
+    path = ootGetPath(exportPath, isCustomExport, "assets/objects/", folderName, False, True)
+    includeDir = settings.customAssetIncludeDir if settings.isCustom else f"assets/objects/{folderName}"
+    exportData = fModel.to_c(
+        TextureExportSettings(False, savePNG, includeDir, path), OOTGfxFormatter(ScrollMethod.Vertex)
+    )
     skeletonC = skeleton.toC()
 
     data.append(exportData.all())
     data.append(skeletonC)
 
-    if settings.useCustomPath:
+    if settings.isCustom:
         textureArrayData = writeTextureArraysNew(fModel, arrayIndex2D)
         data.append(textureArrayData)
 
@@ -633,14 +685,14 @@ def ootConvertArmatureToC(originalArmatureObj: bpy.types.Object, settings: OOTSk
             colliderData = getColliderData(originalArmatureObj)
             data.append(colliderData)
 
-    path = ootGetPath(exportPath, settings.useCustomPath, "assets/objects/", settings.folderName, False, False)
+    path = ootGetPath(exportPath, settings.isCustom, "assets/objects/", folderName, False, False)
     writeCData(data, os.path.join(path, skeletonName + ".h"), os.path.join(path, skeletonName + ".c"))
 
-    if not settings.useCustomPath:
+    if not settings.isCustom:
         writeTextureArraysExisting(bpy.context.scene.ootDecompPath, overlayName, settings.isLink, arrayIndex2D, fModel)
-        addIncludeFiles(settings.folderName, path, skeletonName)
+        addIncludeFiles(folderName, path, skeletonName)
         if settings.removeVanillaData:
-            ootRemoveSkeleton(path, settings.folderName, skeletonName)
+            ootRemoveSkeleton(path, folderName, skeletonName)
 
             if settings.handleColliders.enable:
                 colliderData = getColliderData(originalArmatureObj)
@@ -721,63 +773,63 @@ def ootGetLimb(skeletonData, limbName, continueOnError):
     return matchResult
 
 
-def ootImportSkeletonC(settings: OOTSkeletonImportSettings):
-    importPath = bpy.path.abspath(settings.customPath)
-    isCustomImport = settings.useCustomPath
-    folderName = settings.folderName
-    basePath = bpy.path.abspath(bpy.context.scene.ootDecompPath)
-    overlayName = settings.overlay if not isCustomImport else None
-    arrayIndex2D = settings.arrayIndex2D if settings.isLink or settings.is2DArray else None
-
-    filepaths = [ootGetObjectPath(isCustomImport, importPath, folderName)]
+def ootImportSkeletonC(filepaths: list[str], basePath: str, importSettings: OOTSkeletonImportSettings):
+    skeletonName = importSettings.name
+    removeDoubles = importSettings.removeDoubles
+    importNormals = importSettings.importNormals
+    drawLayer = importSettings.drawLayer
+    overlayName = importSettings.overlay if not importSettings.isCustom else None
+    isLink = importSettings.isLink
+    is2DArray = importSettings.is2DArray
+    arrayIndex2D = importSettings.arrayIndex2D if isLink or is2DArray else None
 
     skeletonData = getImportData(filepaths)
-    if overlayName is not None or settings.isLink:
+    if overlayName is not None or importSettings.isLink:
         skeletonData = ootGetIncludedAssetData(basePath, filepaths, skeletonData) + skeletonData
 
-    matchResult = ootGetSkeleton(skeletonData, settings.name, False)
+    matchResult = ootGetSkeleton(skeletonData, importSettings.name, False)
     limbsName = matchResult.group(2)
 
     matchResult = ootGetLimbs(skeletonData, limbsName, False)
     limbsData = matchResult.group(2)
-    limbList = [entry.strip()[1:] for entry in limbsData.split(",")]
+    limbList = [entry.strip()[1:] for entry in limbsData.split(",") if entry.strip() != ""]
 
     f3dContext = OOTF3DContext(F3D("F3DEX2/LX2", False), limbList, basePath)
-    f3dContext.mat().draw_layer.oot = settings.drawLayer
+    f3dContext.mat().draw_layer.oot = importSettings.drawLayer
 
-    if overlayName is not None and settings.autoDetectActorScale:
-        actorScale = ootReadActorScale(basePath, overlayName, settings.isLink)
+    if overlayName is not None and importSettings.autoDetectActorScale:
+        actorScale = ootReadActorScale(basePath, overlayName, importSettings.isLink)
     else:
-        actorScale = getOOTScale(settings.actorScale)
+        actorScale = getOOTScale(importSettings.actorScale)
 
     # print(limbList)
     isLOD, armatureObj = ootBuildSkeleton(
-        settings.name,
+        importSettings.name,
         overlayName,
         skeletonData,
         actorScale,
-        settings.removeDoubles,
-        settings.importNormals,
+        importSettings.removeDoubles,
+        importSettings.importNormals,
         False,
         basePath,
-        settings.drawLayer,
-        settings.isLink,
+        importSettings.drawLayer,
+        importSettings.isLink,
         arrayIndex2D,
         f3dContext,
     )
     if isLOD:
         f3dContext.clearGeometry()
         isLOD, LODArmatureObj = ootBuildSkeleton(
-            settings.name,
+            importSettings.name,
             overlayName,
             skeletonData,
             actorScale,
-            settings.removeDoubles,
-            settings.importNormals,
+            importSettings.removeDoubles,
+            importSettings.importNormals,
             True,
             basePath,
-            settings.drawLayer,
-            settings.isLink,
+            importSettings.drawLayer,
+            importSettings.isLink,
             arrayIndex2D,
             f3dContext,
         )
@@ -785,8 +837,15 @@ def ootImportSkeletonC(settings: OOTSkeletonImportSettings):
 
     f3dContext.deleteMaterialContext()
 
-    if settings.handleColliders.enable:
-        parseColliderData(settings.name, basePath, overlayName, settings.isLink, armatureObj, settings.handleColliders)
+    if importSettings.handleColliders.enable:
+        parseColliderData(
+            importSettings.name,
+            basePath,
+            overlayName,
+            importSettings.isLink,
+            armatureObj,
+            importSettings.handleColliders,
+        )
 
 
 def ootBuildSkeleton(
@@ -879,6 +938,7 @@ def ootAddBone(armatureObj, boneName, parentBoneName, currentTransform, loadDL):
     bpy.ops.object.mode_set(mode="EDIT")
     bone = armatureObj.data.edit_bones.new(boneName)
     bone.use_connect = False
+    bone.use_deform = loadDL
     if parentBoneName is not None:
         bone.parent = armatureObj.data.edit_bones[parentBoneName]
     bone.head = currentTransform @ mathutils.Vector((0, 0, 0))
@@ -1020,8 +1080,16 @@ class OOT_ImportSkeleton(bpy.types.Operator):
             bpy.ops.object.mode_set(mode="OBJECT")
 
         try:
-            settings = context.scene.ootSkeletonImportSettings
-            ootImportSkeletonC(settings)
+            importSettings: OOTSkeletonImportSettings = context.scene.fast64.oot.skeletonImportSettings
+
+            importPath = bpy.path.abspath(importSettings.customPath)
+            isCustomImport = importSettings.isCustom
+            folderName = importSettings.folder
+            decompPath = bpy.path.abspath(bpy.context.scene.ootDecompPath)
+
+            filepaths = [ootGetObjectPath(isCustomImport, importPath, folderName)]
+
+            ootImportSkeletonC(filepaths, decompPath, importSettings)
 
             self.report({"INFO"}, "Success!")
             return {"FINISHED"}
@@ -1062,12 +1130,17 @@ class OOT_ExportSkeleton(bpy.types.Operator):
         bpy.ops.object.select_all(action="DESELECT")
 
         try:
-            # exportPath, levelName = getPathAndLevel(context.scene.geoCustomExport,
-            # 	context.scene.geoExportPath, context.scene.geoLevelName,
-            # 	context.scene.geoLevelOption)
+            exportSettings: OOTSkeletonExportSettings = context.scene.fast64.oot.skeletonExportSettings
 
-            settings = context.scene.ootSkeletonExportSettings
-            ootConvertArmatureToC(armatureObj, settings)
+            saveTextures = bpy.context.scene.saveTextures
+            isHWv1 = context.scene.isHWv1
+            f3dType = context.scene.f3d_type
+            drawLayer = armatureObj.ootDrawLayer
+            finalTransform = mathutils.Matrix.Scale(getOOTScale(armatureObj.ootActorScale), 4)
+
+            ootConvertArmatureToC(
+                armatureObj, finalTransform, f3dType, isHWv1, DLFormat.Static, saveTextures, drawLayer, exportSettings
+            )
 
             self.report({"INFO"}, "Success!")
             return {"FINISHED"}
@@ -1087,77 +1160,78 @@ class OOT_ExportSkeletonPanel(OOT_Panel):
     def draw(self, context):
         col = self.layout.column()
         col.operator(OOT_ExportSkeleton.bl_idname)
+        exportSettings: OOTSkeletonExportSettings = context.scene.fast64.oot.skeletonExportSettings
 
-        settings = context.scene.ootSkeletonExportSettings
-        prop_split(col, settings, "name", "Skeleton")
-        if settings.useCustomPath:
-            prop_split(col, settings, "customPath", "Folder")
+        prop_split(col, exportSettings, "name", "Skeleton")
+        prop_split(col, exportSettings, "folder", "Object" if not exportSettings.isCustom else "Folder")
+        if exportSettings.isCustom:
+            prop_split(col, exportSettings, "customAssetIncludeDir", "Asset Include Path")
+            prop_split(col, exportSettings, "customPath", "Path")
         else:
-            prop_split(col, settings, "folderName", "Object")
-            if not settings.isLink:
-                prop_split(col, settings, "overlay", "Overlay")
-            col.prop(settings, "isLink")
-            if not settings.isLink:
-                col.prop(settings, "is2DArray")
-            if settings.isLink or settings.is2DArray:
+            if not exportSettings.isLink:
+                prop_split(col, exportSettings, "overlay", "Overlay")
+            col.prop(exportSettings, "isLink")
+            if not exportSettings.isLink:
+                col.prop(exportSettings, "is2DArray")
+            if exportSettings.isLink or exportSettings.is2DArray:
                 box = col.box().column()
-                prop_split(box, settings, "arrayIndex2D", "Flipbook Index")
-                if settings.isLink:
-                    if settings.arrayIndex2D == 0:
+                prop_split(box, exportSettings, "arrayIndex2D", "Flipbook Index")
+                if exportSettings.isLink:
+                    if exportSettings.arrayIndex2D == 0:
                         box.label(text="Adult Link", icon="OPTIONS")
-                    elif settings.arrayIndex2D == 1:
+                    elif exportSettings.arrayIndex2D == 1:
                         box.label(text="Child Link", icon="OPTIONS")
                     box.label(text="Requires enabling NON_MATCHING in Makefile.", icon="ERROR")
-        settings.handleColliders.draw(col, "Export Actor Colliders", False)
-        col.prop(settings, "useCustomPath")
-        col.prop(settings, "removeVanillaData")
-        col.prop(settings, "optimize")
-        if settings.optimize:
+
+        exportSettings.handleColliders.draw(col, "Export Actor Colliders", False)
+        col.prop(exportSettings, "isCustom")
+        col.prop(exportSettings, "removeVanillaData")
+        col.prop(exportSettings, "optimize")
+        if exportSettings.optimize:
             b = col.box().column()
             b.label(icon="LIBRARY_DATA_BROKEN", text="Do not draw anything in SkelAnime")
             b.label(text="callbacks or cull limbs, will be corrupted.")
 
         col.operator(OOT_ImportSkeleton.bl_idname)
+        importSettings: OOTSkeletonImportSettings = context.scene.fast64.oot.skeletonImportSettings
 
-        settings = context.scene.ootSkeletonImportSettings
-        prop_split(col, settings, "name", "Skeleton")
-        if settings.useCustomPath:
-            prop_split(col, settings, "customPath", "File")
+        prop_split(col, importSettings, "name", "skeleton")
+        if importSettings.isCustom:
+            prop_split(col, importSettings, "customPath", "File")
         else:
-            prop_split(col, settings, "folderName", "Object")
-            if not settings.isLink:
-                prop_split(col, settings, "overlay", "Overlay")
-            col.prop(settings, "autoDetectActorScale")
-            if not settings.autoDetectActorScale:
-                prop_split(col, settings, "actorScale", "Actor Scale")
-            settings.handleColliders.draw(col, "Import Actor Colliders", True)
-            col.prop(settings, "isLink")
-            if not settings.isLink:
-                col.prop(settings, "is2DArray")
-            if settings.isLink or settings.is2DArray:
+            prop_split(col, importSettings, "folder", "Object")
+            if not importSettings.isLink:
+                prop_split(col, importSettings, "overlay", "Overlay")
+            col.prop(importSettings, "autoDetectActorScale")
+            if not importSettings.autoDetectActorScale:
+                prop_split(col, importSettings, "actorScale", "Actor Scale")
+            importSettings.handleColliders.draw(col, "Import Actor Colliders", True)
+            col.prop(importSettings, "isLink")
+            if not importSettings.isLink:
+                col.prop(importSettings, "is2DArray")
+            if importSettings.isLink or importSettings.is2DArray:
                 box = col.box().column()
-                prop_split(box, settings, "arrayIndex2D", "Flipbook Index")
-                if settings.isLink:
-                    if settings.arrayIndex2D == 0:
+                prop_split(box, importSettings, "arrayIndex2D", "Flipbook Index")
+                if importSettings.isLink:
+                    if importSettings.arrayIndex2D == 0:
                         box.label(text="Adult Link", icon="OPTIONS")
-                    elif settings.arrayIndex2D == 1:
+                    elif importSettings.arrayIndex2D == 1:
                         box.label(text="Child Link", icon="OPTIONS")
-            if settings.overlay == "ovl_En_Wf":
+            if importSettings.overlay == "ovl_En_Wf":
                 col.box().column().label(
                     text="This actor has branching gSPSegment calls and will not import correctly unless one of the branches is deleted.",
                     icon="ERROR",
                 )
-            elif settings.overlay == "ovl_Obj_Switch":
+            elif importSettings.overlay == "ovl_Obj_Switch":
                 col.box().column().label(
                     text="This actor has a 2D texture array and will not import correctly unless the array is flattened.",
                     icon="ERROR",
                 )
+        prop_split(col, importSettings, "drawLayer", "Import Draw Layer")
 
-        prop_split(col, settings, "drawLayer", "Import Draw Layer")
-
-        col.prop(settings, "useCustomPath")
-        col.prop(settings, "removeDoubles")
-        col.prop(settings, "importNormals")
+        col.prop(importSettings, "isCustom")
+        col.prop(importSettings, "removeDoubles")
+        col.prop(importSettings, "importNormals")
 
 
 class OOT_SkeletonPanel(bpy.types.Panel):
@@ -1244,18 +1318,12 @@ def oot_skeleton_register():
     for cls in oot_skeleton_classes:
         register_class(cls)
 
-    bpy.types.Scene.ootSkeletonImportSettings = bpy.props.PointerProperty(type=OOTSkeletonImportSettings)
-    bpy.types.Scene.ootSkeletonExportSettings = bpy.props.PointerProperty(type=OOTSkeletonExportSettings)
-
     bpy.types.Object.ootActorScale = bpy.props.FloatProperty(min=0, default=100)
     bpy.types.Object.ootSkeleton = bpy.props.PointerProperty(type=OOTSkeletonProperty)
     bpy.types.Bone.ootBone = bpy.props.PointerProperty(type=OOTBoneProperty)
 
 
 def oot_skeleton_unregister():
-
-    del bpy.types.Scene.ootSkeletonExportSettings
-    del bpy.types.Scene.ootSkeletonImportSettings
 
     del bpy.types.Object.ootActorScale
     del bpy.types.Bone.ootBone
