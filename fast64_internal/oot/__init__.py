@@ -90,6 +90,9 @@ def oot_register(registerPanels):
     for cls in oot_classes:
         register_class(cls)
 
+    for cls in oot_classes:
+        register_class(cls)
+
     if registerPanels:
         oot_panel_register()
 
