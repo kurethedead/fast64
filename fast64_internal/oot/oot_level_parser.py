@@ -189,7 +189,7 @@ def parseScene(
         subfolder = None
     else:
         if option == "Custom":
-            subfolder = "assets/scenes/" + settings.subFolder + "/"
+            subfolder = "assets/scenes/" + ((settings.subFolder + "/") if settings.subFolder.strip() != "" else "")
         else:
             sceneName = sceneNameFromID(option)
             subfolder = None
@@ -202,7 +202,10 @@ def parseScene(
         importSubdir = os.path.dirname(getSceneDirFromLevelName(sceneName)) + "/"
 
     sceneFolderPath = ootGetPath(importPath, settings.isCustomDest, importSubdir, sceneName, False, True)
-    sceneData = readFile(os.path.join(sceneFolderPath, f"{sceneName}_scene.c"))
+    sceneFilePath = os.path.join(sceneFolderPath, f"{sceneName}_scene.c")  # oot naming
+    if not os.path.exists(sceneFilePath):
+        sceneFilePath = os.path.join(sceneFolderPath, f"{sceneName}.c")  # mm naming
+    sceneData = readFile(sceneFilePath)
 
     # roomData = ""
     # sceneFolderFiles = [f for f in listdir(sceneFolderPath) if isfile(join(sceneFolderPath, f))]
@@ -224,7 +227,7 @@ def parseScene(
     parseMatrices(sceneData, f3dContext, 1 / bpy.context.scene.ootBlenderScale)
     f3dContext.addMatrix("&gMtxClear", mathutils.Matrix.Scale(1 / bpy.context.scene.ootBlenderScale, 4))
 
-    if not settings.isCustomDest:
+    if not settings.isCustomDest and False:  # ignore for mm
         drawConfigName = getDrawConfig(sceneName)
         drawConfigData = readFile(os.path.join(importPath, "src/code/z_scene_table.c"))
         parseDrawConfig(drawConfigName, sceneData, drawConfigData, f3dContext)
@@ -236,6 +239,8 @@ def parseScene(
     sceneCommandsName = f"{sceneName}_sceneCommands"
     if sceneCommandsName not in sceneData:
         sceneCommandsName = f"{sceneName}_scene_header00"  # fast64 naming
+    if sceneCommandsName not in sceneData:
+        sceneCommandsName = f"{sceneName}Commands"  # mm naming
     sharedSceneData = SharedSceneData(
         sceneFolderPath,
         settings.includeMesh,
@@ -250,7 +255,7 @@ def parseScene(
     sceneObj = parseSceneCommands(None, None, sceneCommandsName, sceneData, f3dContext, 0, sharedSceneData)
     bpy.context.scene.ootSceneExportObj = sceneObj
 
-    if not settings.isCustomDest:
+    if not settings.isCustomDest and False:  # ignore for mm
         setCustomProperty(
             sceneObj.ootSceneHeader.sceneTableEntry, "drawConfig", getDrawConfig(sceneName), ootEnumDrawConfig
         )
@@ -310,8 +315,9 @@ def parseSceneCommands(
             parseTransActorList(roomObjs, sceneData, transActorListName, sharedSceneData, headerIndex)
 
         elif command == "SCENE_CMD_MISC_SETTINGS":
-            setCustomProperty(sceneHeader, "cameraMode", args[0], ootEnumCameraMode)
-            setCustomProperty(sceneHeader, "mapLocation", args[1], ootEnumMapLocation)
+            pass  # scene command different in mm
+            # setCustomProperty(sceneHeader, "cameraMode", args[0], ootEnumCameraMode)
+            # setCustomProperty(sceneHeader, "mapLocation", args[1], ootEnumMapLocation)
         elif command == "SCENE_CMD_COL_HEADER":
             # Assumption that all scenes use the same collision.
             if headerIndex == 0:
@@ -390,6 +396,8 @@ def parseRoomList(
         roomCommandsName = f"{roomName}Commands"
         if roomCommandsName not in roomData:
             roomCommandsName = f"{roomName}_header00"  # fast64 naming
+        if roomCommandsName not in roomData:
+            roomCommandsName = f"{roomName}Commands"  # mm naming
 
         # Assumption that any shared textures are stored after the CollisionHeader.
         # This is done to avoid including large collision data in regex searches.
@@ -618,7 +626,7 @@ def parseMeshList(
                     sceneData, displayList, bpy.context.scene.ootBlenderScale, True, True, drawLayer, f3dContext, False
                 )
                 meshObj.location = [0, 0, 0]
-                meshObj.ignore_collision = True
+                # meshObj.ignore_collision = True
                 parentObject(parentObj, meshObj)
 
 
