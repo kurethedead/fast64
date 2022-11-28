@@ -1,4 +1,5 @@
-from typing import Union
+from typing import Union, Tuple, List
+from collections import OrderedDict
 import functools
 import bpy, bmesh, mathutils, os, re, copy, math
 from math import pi, ceil
@@ -26,7 +27,11 @@ from ..utility import *
 
 class FImageKey:
     def __init__(
-        self, image: bpy.types.Image, texFormat: str, palFormat: str, imagesSharingPalette: list[bpy.types.Image] = []
+        self,
+        image: Union[bpy.types.Image, str],
+        texFormat: str,
+        palFormat: str,
+        imagesSharingPalette: list[bpy.types.Image] = [],
     ):
         self.image = image
         self.texFormat = texFormat
@@ -417,7 +422,7 @@ def saveMeshWithLargeTexturesByFaces(
     # 	bMesh, texDimensions, transformMatrix, isPointSampled, isFlatShaded,
     # 	exportVertexColors, fModel.f3d)
     currentGroupIndex = None
-    imageKey0, imageKey1 = getImageKeys(f3dMat, False)
+    imageKey0, imageKey1 = getImageKeys(fModel, f3dMat, False)
     for tileLoad, tileFaces in tileLoads:
         revertCommands = GfxList("temp", GfxListTag.Draw, fModel.DLFormat)
         nextTmem = 0
@@ -432,7 +437,6 @@ def saveMeshWithLargeTexturesByFaces(
                 f3dMat.tex0,
                 0,
                 nextTmem,
-                None,
                 False,
                 [tileLoad, None],
                 True,
@@ -450,7 +454,6 @@ def saveMeshWithLargeTexturesByFaces(
                 f3dMat.tex1,
                 1,
                 nextTmem,
-                None,
                 False,
                 [None, tileLoad],
                 True,
@@ -1433,28 +1436,44 @@ class FSharedPalette:
         self.palette = []
 
 
-def getImageKeys(f3dMat: F3DMaterialProperty, useSharedCIPalette: bool) -> tuple[FImageKey, FImageKey]:
-    imageKey0 = FImageKey(
-        f3dMat.tex0.tex,
-        f3dMat.tex0.tex_format,
-        f3dMat.tex0.ci_format,
-        [f3dMat.tex0.tex] + ([f3dMat.tex1.tex] if useSharedCIPalette else []),
+def getImageKey(texProp: TextureProperty, imagesSharingPalette: Iterable[bpy.types.Image]):
+    imageKey = FImageKey(
+        texProp.tex if not texProp.use_tex_reference else texProp.tex_reference,
+        texProp.tex_format,
+        texProp.ci_format,
+        imagesSharingPalette,
     )
-    imageKey1 = FImageKey(
-        f3dMat.tex1.tex,
-        f3dMat.tex1.tex_format,
-        f3dMat.tex1.ci_format,
-        ([f3dMat.tex0.tex] if useSharedCIPalette else []) + [f3dMat.tex1.tex],
-    )
-
-    return imageKey0, imageKey1
+    return imageKey
 
 
-def saveOrGetF3DMaterial(material, fModel, obj, drawLayer, convertTextureData):
-    if material.mat_ver > 3:
-        f3dMat = material.f3d_mat
+# This should be an FModel member
+def getImageKeys(fModel: FModel, f3dMat: F3DMaterialProperty, useSharedCIPalette: bool) -> tuple[FImageKey, FImageKey]:
+    if hasattr(fModel, "getImageKeys"):
+        return fModel.getImageKeys(f3dMat, useSharedCIPalette)
     else:
-        f3dMat = material
+        images0 = [item[1] for item in getTexturesToProcess(fModel, f3dMat.tex0).items()]
+        images1 = [item[1] for item in getTexturesToProcess(fModel, f3dMat.tex1).items()]
+
+        sharedPalette = images0 + images1
+        imageKey0 = getImageKey(
+            f3dMat.tex0,
+            sharedPalette if useSharedCIPalette else images0,
+        )
+        imageKey1 = getImageKey(
+            f3dMat.tex1,
+            sharedPalette if useSharedCIPalette else images1,
+        )
+
+        return imageKey0, imageKey1
+
+
+def saveOrGetF3DMaterial(
+    material: bpy.types.Material, fModel: FModel, obj: bpy.types.Object, drawLayer: str, convertTextureData: bool
+):
+    if material.mat_ver > 3:
+        f3dMat: F3DMaterialProperty = material.f3d_mat
+    else:
+        f3dMat: F3DMaterialProperty = material
 
     areaKey = fModel.global_data.getCurrentAreaKey(f3dMat)
     areaIndex = fModel.global_data.current_area_index
@@ -1609,7 +1628,7 @@ def saveOrGetF3DMaterial(material, fModel, obj, drawLayer, convertTextureData):
         loadGfx = fMaterial.material
         revertGfx = fMaterial.revert
 
-    imageKey0, imageKey1 = getImageKeys(f3dMat, useSharedCIPalette)
+    imageKey0, imageKey1 = getImageKeys(fModel, f3dMat, useSharedCIPalette)
 
     if useTex0:
         if f3dMat.tex0.tex is None and not f3dMat.tex0.use_tex_reference:
@@ -1626,7 +1645,6 @@ def saveOrGetF3DMaterial(material, fModel, obj, drawLayer, convertTextureData):
             f3dMat.tex0,
             0,
             nextTmem,
-            None,
             convertTextureData,
             None,
             True,
@@ -1656,7 +1674,6 @@ def saveOrGetF3DMaterial(material, fModel, obj, drawLayer, convertTextureData):
             f3dMat.tex1,
             1,
             nextTmem,
-            None,
             convertTextureData,
             None,
             True,
@@ -1797,7 +1814,7 @@ def saveOrGetF3DMaterial(material, fModel, obj, drawLayer, convertTextureData):
     return fMaterial, texDimensions
 
 
-def getTextureName(texProp: TextureProperty, fModelName: str, overrideName: str) -> str:
+def getTextureName(texProp: TextureProperty, fModelName: str) -> str:
     tex = texProp.tex
     texFormat = texProp.tex_format
     if not texProp.use_tex_reference:
@@ -1807,11 +1824,7 @@ def getTextureName(texProp: TextureProperty, fModelName: str, overrideName: str)
             name = tex.filepath
     else:
         name = texProp.tex_reference
-    texName = (
-        fModelName
-        + "_"
-        + (getNameFromPath(name, True) + "_" + texFormat.lower() if overrideName is None else overrideName)
-    )
+    texName = fModelName + "_" + getNameFromPath(name, True) + "_" + texFormat.lower()
 
     return texName
 
@@ -1834,6 +1847,34 @@ def getTextureNameTexRef(texProp: TextureProperty, fModelName: str) -> str:
     return texName
 
 
+# This should be an FModel member
+def getTexturesToProcess(fModel: FModel, texProp: TextureProperty) -> OrderedDict[str, bpy.types.Image]:
+    if hasattr(fModel, "getTexturesToProcess"):
+        return fModel.getTexturesToProcess(texProp)
+    else:
+        name = getTextureName(texProp, fModel.name, None)
+        return OrderedDict([(name, texProp.tex)] if not texProp.use_tex_reference else [])
+
+
+def validateImage(texProp: TextureProperty, image: bpy.types.Image, propName: str):
+    if image is not None and (image.size[0] == 0 or image.size[1] == 0):
+        raise PluginError(
+            "Image "
+            + image.name
+            + " has either a 0 width or height; image may have been removed from original location."
+        )
+
+    if not texProp.use_tex_reference:
+        if image is None:
+            raise PluginError("In " + propName + ", no texture is selected.")
+        elif len(image.pixels) == 0:
+            raise PluginError(
+                "Could not load missing texture: "
+                + image.name
+                + ". Make sure this texture has not been deleted or moved on disk."
+            )
+
+
 def saveTextureIndex(
     propName: str,
     fModel: FModel,
@@ -1843,7 +1884,6 @@ def saveTextureIndex(
     texProp: TextureProperty,
     index: int,
     tmem: int,
-    overrideName: str,
     convertTextureData: bool,
     tileSettingsOverride,
     loadTextures: bool,
@@ -1851,28 +1891,15 @@ def saveTextureIndex(
     sharedPalette: FSharedPalette,
     imageKey: FImageKey,
 ) -> tuple[list[int], int, FImage]:
-    tex = texProp.tex
 
-    if tex is not None and (tex.size[0] == 0 or tex.size[1] == 0):
-        raise PluginError(
-            "Image " + tex.name + " has either a 0 width or height; image may have been removed from original location."
-        )
-
-    if not texProp.use_tex_reference:
-        if tex is None:
-            raise PluginError("In " + propName + ", no texture is selected.")
-        elif len(tex.pixels) == 0:
-            raise PluginError(
-                "Could not load missing texture: "
-                + tex.name
-                + ". Make sure this texture has not been deleted or moved on disk."
-            )
+    # This is usually one texture, but in the case of texture references its possible to have multiple textures.
+    # In that case, we want to be able to handle shared CI palettes.
+    # In game-specific FModel classes its possible to provide multiple textures to process
+    texturesToProcess = getTexturesToProcess(fModel, texProp)
 
     texFormat = texProp.tex_format
     isCITexture = texFormat[:2] == "CI"
     palFormat = texProp.ci_format if isCITexture else ""
-
-    texName = getTextureName(texProp, fModel.name, overrideName)
 
     if tileSettingsOverride is not None:
         tileSettings = tileSettingsOverride[index]
@@ -1883,7 +1910,8 @@ def saveTextureIndex(
         if texProp.use_tex_reference:
             width, height = texProp.tex_reference_size
         else:
-            width, height = tex.size
+            # Use first image dimensions, assume all images are same size
+            width, height = texturesToProcess.items()[0][1].size
         setTLUTMode = fModel.matWriteMethod == GfxMatWriteMethod.WriteAll
 
     nextTmem = tmem + getTmemWordUsage(texFormat, width, height)
@@ -1930,32 +1958,47 @@ def saveTextureIndex(
         shift_T = 0
 
     if isCITexture:
+        resultList: Iterable[Tuple[FImage, FImage, bool]] = []
+        for name, image in texturesToProcess.items():
+            # fPalette should be an fImage here, since sharedPalette is None
+            validateImage(image, propName)
+            resultList.append(
+                saveOrGetPaletteAndImageDefinition(
+                    fMaterial,
+                    fModel,
+                    image,
+                    name,
+                    texFormat,
+                    palFormat,
+                    convertTextureData,
+                    sharedPalette,
+                    imageKey,
+                )
+            )
+
         if texProp.use_tex_reference:
             fImage = FImage(texProp.tex_reference, None, None, width, height, None, False)
             fPalette = FImage(texProp.pal_reference, None, None, 1, texProp.pal_reference_size, None, False)
         else:
-            # fPalette should be an fImage here, since sharedPalette is None
-            fImage, fPalette, alreadyExists = saveOrGetPaletteAndImageDefinition(
-                fMaterial,
-                fModel,
-                tex,
-                texName,
-                texFormat,
-                palFormat,
-                convertTextureData,
-                sharedPalette,
-                imageKey,
-            )
+            # If not using tex reference, there is only one texture to handle.
+            fImage = resultList[0][0]
+            fPalette = resultList[0][1]
 
         if loadPalettes and sharedPalette is None:
             savePaletteLoading(
                 loadTexGfx, revertTexGfx, fPalette, palFormat, 0, fPalette.height, fModel.f3d, fModel.matWriteMethod
             )
     else:
+        resultList: Iterable[FImage] = []
+        for name, image in texturesToProcess.items():
+            validateImage(image, propName)
+            resultList.append(saveOrGetTextureDefinition(fMaterial, fModel, image, name, texFormat, convertTextureData))
+
         if texProp.use_tex_reference:
             fImage = FImage(texProp.tex_reference, None, None, width, height, None, False)
         else:
-            fImage = saveOrGetTextureDefinition(fMaterial, fModel, tex, texName, texFormat, convertTextureData)
+            # If not using tex reference, there is only one texture to handle.
+            fImage = resultList[0]
 
     if setTLUTMode and not isCITexture:
         loadTexGfx.commands.append(DPSetTextureLUT("G_TT_NONE"))

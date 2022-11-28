@@ -366,7 +366,6 @@ def exportTexRectCommon(texProp, f3dType, isHWv1, name, convertTextureData):
         texProp,
         0,
         0,
-        "texture",
         convertTextureData,
         None,
         True,
