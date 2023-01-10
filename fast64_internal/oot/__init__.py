@@ -85,7 +85,8 @@ def oot_register(registerPanels):
     oot_anim.oot_anim_register()
     oot_skeleton.oot_skeleton_register()
     oot_cutscene.oot_cutscene_register()
-    oot_actor_collider.oot_actor_collider_register()
+    oot_actor_collider.oot_actor_collider_props_register()
+    oot_actor_collider.oot_actor_collider_ops_register()
 
     for cls in oot_classes:
         register_class(cls)
@@ -113,7 +114,8 @@ def oot_unregister(unregisterPanels):
     oot_anim.oot_anim_unregister()
     oot_skeleton.oot_skeleton_unregister()
     oot_cutscene.oot_cutscene_unregister()
-    oot_actor_collider.oot_actor_collider_unregister()
+    oot_actor_collider.oot_actor_collider_props_unregister()
+    oot_actor_collider.oot_actor_collider_ops_unregister()
 
     if unregisterPanels:
         oot_panel_unregister()

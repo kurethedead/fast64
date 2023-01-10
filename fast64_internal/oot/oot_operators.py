@@ -176,7 +176,7 @@ class OOT_OperatorsPanel(OOT_Panel):
 
         col.label(text="")
         col.label(text="Armatures")
-        col.operator(ArmatureApplyWithMesh.bl_idname)
+        col.operator(ArmatureApplyWithMeshOperator.bl_idname)
 
         col.label(text="")
         col.label(text="Actor Colliders")
