@@ -384,10 +384,9 @@ def parseRoomList(
         rf"\{{([\(\)\sA-Za-z0-9\_]*),([\(\)\sA-Za-z0-9\_]*)\}}\s*,", roomList, flags=re.DOTALL
     ):
         roomName = roomMatch.group(1).strip().replace("SegmentRomStart", "")
-        if "(u32)" in roomName:
-            roomName = roomName[5:].strip()[1:]  # includes leading underscore
-        else:
-            roomName = roomName[1:]
+
+        if "(uintptr_t)" in roomName:
+            roomName = roomName.replace("(uintptr_t)_", "")
 
         roomPath = os.path.join(sharedSceneData.scenePath, f"{roomName}.c")
         roomData = readFile(roomPath)
