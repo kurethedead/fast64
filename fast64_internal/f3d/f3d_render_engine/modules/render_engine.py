@@ -209,7 +209,7 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
         out_buffer = gpu.types.GPUFrameBuffer(depth_slot=z, color_slots=(tscenelit))
 
         with out_buffer.bind():
-            gpu.state.active_framebuffer_get().clear(color=(0, 0, 0, 0), depth=1.0)
+            gpu.state.active_framebuffer_get().clear(color=settings.world_color, depth=1.0)
 
             # Bind (fragment) shader that converts from scene linear to display space,
             # self.bind_display_space_shader(scene)
