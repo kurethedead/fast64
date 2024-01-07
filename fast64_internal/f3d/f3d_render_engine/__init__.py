@@ -1,6 +1,7 @@
 # Based on https://github.com/huutaiii/blender-custom-render-engine
 import os, sys
 
+# This code is needed to load shaders from folder
 if os.name == "nt":
     delimiter = "\\"
 if os.name == "posix":
