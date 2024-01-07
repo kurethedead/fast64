@@ -19,6 +19,10 @@ uniform vec3 col_basecolor;
 uniform vec3 col_shadowtint;
 uniform int shadingmodel;
 
+uniform f3d_state_frag {
+    vec4 test;
+};
+
 // global parameters
 uniform vec4 outline_color;
 

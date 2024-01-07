@@ -15,6 +15,15 @@ out vec2 texcoord;
 
 uniform mat4 matrix_world;
 
+uniform f3d_state_vert {
+    vec4 light_colors[8];
+    vec4 light_directions[8];
+    bool g_lighting;
+    int padding1;
+    int padding2;
+    int padding3;
+};
+
 void main()
 {
     gl_Position = matrix_world * vec4(position, 1);

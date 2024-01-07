@@ -9,6 +9,10 @@ in float outline;
 
 layout (location = 0) out vec4 color; // gl_FragColor
 
+uniform f3d_state_frag {
+    vec4 test;
+};
+
 uniform mat4 directional_lights;
 uniform float shading_sharpness;
 uniform sampler2D tbasecolor;

@@ -48,7 +48,13 @@ class MaterialShader:
         )
         # print("compiling material: " + ("default" if not material else material.name), flush=True)
         self.material: bpy.types.Material = material
+        self.f3d_state_frag: gpu.types.GPUUniformBuf = None
+        self.create_ubo(material)
         self.update()
+
+    def create_ubo(self, material: bpy.types.Material):
+        data = bytearray([i for i in range(16)])
+        self.f3d_state_frag = gpu.types.GPUUniformBuf(data)
 
     def update(self):
         self.tbasecolor = gpu.types.GPUTexture((1, 1))
@@ -72,10 +78,8 @@ class MaterialShader:
         if self.material:
             self.col_basecolor = tuple(self.material.diffuse_color[:3])
             # print(f"{self.material} {self.col_basecolor}", flush=True)
-            self.shadingmodel = (
-                CustomRenderEngineMaterialSettings.get_shadingmodel_value(
-                    self.material.custom_settings.shading_model
-                )
+            self.shadingmodel = CustomRenderEngineMaterialSettings.get_shadingmodel_value(
+                self.material.custom_settings.shading_model
             )
             # print(f"{self.material.name} {self.shadingmodel}", flush=True)
         else:
@@ -84,6 +88,7 @@ class MaterialShader:
 
     def bind(self):
         self.shader.bind()
+        self.shader.uniform_block("f3d_state_frag", self.f3d_state_frag)
         self.shader.uniform_sampler("tbasecolor", self.tbasecolor)
         self.shader.uniform_sampler("tshadowtint", self.tshadowtint)
         self.shader.uniform_float("col_basecolor", self.col_basecolor)
@@ -92,19 +97,19 @@ class MaterialShader:
 
 
 class BatchData:
-    def __init__(self, batch: GPUBatch, material_shader: MaterialShader):
+    def __init__(self, batch: GPUBatch, material_shader: MaterialShader, mesh_ubo: gpu.types.GPUUniformBuf):
         self.batch = batch
         self.material_shader = material_shader
+        self.f3d_state_vert = mesh_ubo
 
 
 class MeshDraw:
-    def __init__(
-        self, mesh: bpy.types.Mesh, material_shaders: dict[int, MaterialShader]
-    ):
+    def __init__(self, mesh: bpy.types.Mesh, material_shaders: dict[int, MaterialShader]):
         self.batches: List[BatchData] = []
         self.default_shader: gpu.types.GPUShader = gpu.types.GPUShader(
             VERTEX_SHADER, PIXEL_SHADER, geocode=GEOMETRY_SHADER
         )
+        self.f3d_state_vert: gpu.types.GPUUniformBuf = None
 
         # calculate loops
         mesh.calc_loop_triangles()
@@ -133,14 +138,12 @@ class MeshDraw:
         mesh.loops.foreach_get("bitangent_sign", bitangent_signs)
         bitangent_signs = np.negative(bitangent_signs)
 
-        uvLayer = mesh.uv_layers["UVMap"]
+        uvLayer = mesh.uv_layers["UVMap"] if "UVMap" in mesh.uv_layers else None
         if uvLayer and len(uvLayer.data) > 0:
             uvLayer.data.foreach_get("uv", np.reshape(uvs, len(mesh.loops) * 2))
 
         colorLayer = mesh.vertex_colors["Col"] if "Col" in mesh.vertex_colors else None
-        alphaLayer = (
-            mesh.vertex_colors["Alpha"] if "Alpha" in mesh.vertex_colors else None
-        )
+        alphaLayer = mesh.vertex_colors["Alpha"] if "Alpha" in mesh.vertex_colors else None
         if colorLayer and len(colorLayer.data) > 0:
             colorLayer.data.foreach_get("color", np.reshape(color, len(mesh.loops) * 4))
 
@@ -172,9 +175,11 @@ class MeshDraw:
             if matIndex in material_shaders:
                 material_shader = material_shaders[matIndex]
                 shader = material_shader.shader
+                mesh_ubo = self.create_mesh_ubo(material_shader.material)
             else:
                 material_shader = None
                 shader = self.default_shader
+                mesh_ubo = None
 
             # currently all mesh data is sent for each material section, with indices determining what to draw
             # TODO: Is it faster to pre split all mesh data per section? We wouldn't be able to use foreach_get in that case.
@@ -194,8 +199,14 @@ class MeshDraw:
                         indices=indices,
                     ),
                     material_shader,
+                    mesh_ubo,
                 )
             )
+
+    def create_mesh_ubo(self, material: bpy.types.Material) -> gpu.types.GPUUniformBuf:
+        data = bytearray([i for i in range(16)])
+        # TODO: pass most of f3d state in through here
+        return gpu.types.GPUUniformBuf(data)
 
     def draw(self, transform, view_projection_matrix, settings, texture=None):
         for batchData in self.batches:
@@ -205,18 +216,16 @@ class MeshDraw:
             else:
                 shader = batchData.material_shader.bind()
 
+            if batchData.f3d_state_vert is not None:
+                shader.uniform_block("f3d_state_vert", batchData.f3d_state_vert)
             shader.uniform_float("matrix_world", transform)
             shader.uniform_float("mat_view_projection", view_projection_matrix)
 
             shader.uniform_bool("render_outlines", [settings.enable_outline])
             shader.uniform_float("outline_width", settings.outline_width)
             shader.uniform_float("outline_color", settings.outline_color)
-            shader.uniform_float(
-                "depth_scale_exponent", settings.outline_depth_exponent
-            )
-            shader.uniform_bool(
-                "use_vertexcolor_alpha", [settings.use_vertexcolor_alpha]
-            )
+            shader.uniform_float("depth_scale_exponent", settings.outline_depth_exponent)
+            shader.uniform_bool("use_vertexcolor_alpha", [settings.use_vertexcolor_alpha])
             shader.uniform_bool("use_vertexcolor_rgb", [settings.use_vertexcolor_rgb])
 
             # if settings.basecolor_texture:
@@ -267,30 +276,20 @@ class MeshDraw:
             self.shader.uniform_float("world_color", settings.world_color)
 
             self.shader.uniform_float("outline_width", settings.outline_width)
-            self.shader.uniform_float(
-                "depth_scale_exponent", settings.outline_depth_exponent
-            )
-            self.shader.uniform_bool(
-                "use_vertexcolor_alpha", [settings.use_vertexcolor_alpha]
-            )
-            self.shader.uniform_bool(
-                "use_vertexcolor_rgb", [settings.use_vertexcolor_rgb]
-            )
+            self.shader.uniform_float("depth_scale_exponent", settings.outline_depth_exponent)
+            self.shader.uniform_bool("use_vertexcolor_alpha", [settings.use_vertexcolor_alpha])
+            self.shader.uniform_bool("use_vertexcolor_rgb", [settings.use_vertexcolor_rgb])
 
             try:
                 if settings.basecolor_texture:
-                    tbasecolor = gpu.texture.from_image(
-                        bpy.data.images[settings.basecolor_texture]
-                    )
+                    tbasecolor = gpu.texture.from_image(bpy.data.images[settings.basecolor_texture])
                 else:
                     tbasecolor = gpu.types.GPUTexture((1, 1))
                     tbasecolor.clear(format="FLOAT", value=(0.5, 0.5, 0.5, 1))
                 self.shader.uniform_sampler("tbasecolor", tbasecolor)
 
                 if settings.shadowtint_texture:
-                    tshadowtint = gpu.texture.from_image(
-                        bpy.data.images[settings.basecolor_texture]
-                    )
+                    tshadowtint = gpu.texture.from_image(bpy.data.images[settings.basecolor_texture])
                 else:
                     tshadowtint = gpu.types.GPUTexture((1, 1))
                     tshadowtint.clear(format="FLOAT", value=(0, 0, 0, 1))
