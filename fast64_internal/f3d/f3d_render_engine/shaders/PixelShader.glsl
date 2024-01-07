@@ -1,46 +1,30 @@
 // #version 430 /* inserted automatically by blender */
 
-in vec4 vcolor; // vertex color
-in vec3 normal;
-in vec3 tangent;
-in vec3 view;
-in vec2 uv;
-in float outline;
+in vec4 vertex_color; // vertex color
+in vec3 world_normal;
+in vec2 texcoord;
 
-layout (location = 0) out vec4 color; // gl_FragColor
+layout (location = 0) out vec4 tscenelit;
+
+// material parameters
+uniform sampler2D tbasecolor;
+uniform sampler2D tshadowtint;
+uniform vec3 col_basecolor;
+uniform vec3 col_shadowtint;
+uniform int shadingmodel;
 
 uniform f3d_state_frag {
     vec4 test;
 };
 
-uniform mat4 directional_lights;
-uniform float shading_sharpness;
-uniform sampler2D tbasecolor;
-uniform sampler2D tshadowtint;
-uniform vec4 world_color;
-uniform float fresnel_fac;
+uniform sampler2D tex0;
+uniform sampler2D tex1;
+
+// global parameters
+uniform vec4 outline_color;
 
 void main()
 {
-    if (outline > 0)
-    {
-        color = vec4(0, 0, 0, 1);
-    } 
-    else
-    {
-        vec3 base_color = texture(tbasecolor, uv).xyz;
-        vec3 shadow_tint = texture(tshadowtint, uv).xyz;
-        float fresnel = smoothstep(mix(0.33, 0.67, shading_sharpness), mix(1.0, 0.671, shading_sharpness), 1 - dot(normal, view)) * fresnel_fac;
-        color.xyz = base_color * world_color.xyz * (1 + fresnel);
-        for (int i = 0; i <= 3; ++i)
-        {
-            if (directional_lights[i].w > 0)
-            {
-                vec3 light = directional_lights[i].xyz;
-                float nl = smoothstep(0, 1 - shading_sharpness, dot(normal, light));
-                color.xyz += mix(base_color * shadow_tint, base_color, nl) * directional_lights[i].w * mix(1.0, 0.5, shading_sharpness);
-            }
-        }
-        color.a = 1;
-    }
+    tscenelit = vec4(texture(tex0, texcoord).rgb, 1);
+    //tscenelit = vec4(1, 0, 0, 1);
 }

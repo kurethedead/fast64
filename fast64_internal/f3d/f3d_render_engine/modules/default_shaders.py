@@ -1,6 +1,5 @@
 VERTEX_SHADER = open("shaders/VertexShader.glsl").read()
-GEOMETRY_SHADER = open("shaders/GeometryShader.glsl").read()
-PIXEL_SHADER = open("shaders/PixelShader.glsl").read()
+PIXEL_SHADER = open("shaders/FallbackPixelShader.glsl").read()
 
 VERTEX_2D = """
     in vec2 pos;

@@ -3,7 +3,6 @@ from gpu_extras.batch import batch_for_shader
 from .material import CustomRenderEngineMaterialSettings
 from .settings import Fast64RenderEngineSettings, Fast64RenderEnginePanel
 from .light_settings import Fast64RenderEngineLightPanel
-from .light_renderering import DirectionalLightRendering, LocalLightRendering
 from .mesh_rendering import MeshDraw, MaterialShader
 from .default_shaders import (
     VERTEX_2D,
@@ -36,7 +35,7 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
         self.draw_calls = {}
         self.lights = []
         self.mesh_objects = []
-        self.material_shaders = dict()
+        self.material_shaders: dict[str, MaterialShader] = dict()
 
     # When the render engine instance is destroy, this is called. Clean up any
     # render engine data here, for example stopping running render threads.
@@ -72,13 +71,13 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
         self.end_result(result)
 
     def create_mesh_draw(self, meshObj: bpy.types.Object):
-        material_shaders: dict[int, MaterialShader] = {}
         for i in range(len(meshObj.material_slots)):
             material = meshObj.material_slots[i].material
-            if material is not None:
-                material_shaders[i] = MaterialShader(material)
+            if material is not None and material.name not in self.material_shaders:
+                self.material_shaders[material.name] = MaterialShader(material)
+                self.add_material_user(meshObj, material)
 
-        return MeshDraw(meshObj.data, material_shaders)
+        return MeshDraw(meshObj, self.material_shaders)
 
     def add_material_user(self, mesh, material):
         if not material.name in self.materials_users:
@@ -123,8 +122,6 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
                 if isinstance(datablock, bpy.types.Object) and datablock.type == "MESH":
                     # print(datablock.type, " ", datablock.name, flush=True)
                     self.draw_calls[datablock.name] = self.create_mesh_draw(datablock)
-                    if datablock.active_material:
-                        self.add_material_user(datablock, datablock.active_material)
 
         else:
             first_time = False
@@ -177,9 +174,13 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
                             # light = light_direction.to_4d()
                             # light.w = object.data.energy
                             # self.lights.append(light)
-                            self.lights.append(DirectionalLightRendering(object))
+
+                            # TODO: Handle lights
+                            # self.lights.append(DirectionalLightRendering(object))
+                            pass
                         case "POINT" | "SPOT":
-                            self.lights.append(LocalLightRendering(object))
+                            # self.lights.append(LocalLightRendering(object))
+                            pass
 
     # For viewport renders, this method is called whenever Blender redraws
     # the 3D viewport. The renderer is expected to quickly draw the render
@@ -201,20 +202,14 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
         offscr_scale = settings.backbuffer_scale
         fb_size = (math.floor(w * offscr_scale), math.floor(h * offscr_scale))
         final_color_format = "RGBA16"
-        gbuffer_format = "RGBA16"
-        normal_format = "RGBA32F"
-        # if offscr_scale > 1:
-        #     offscr_scale = math.floor(offscr_scale)
-        basecolor = gpu.types.GPUTexture(fb_size, format=gbuffer_format)
-        shadowcolor = gpu.types.GPUTexture(fb_size, format=gbuffer_format)
-        normal = gpu.types.GPUTexture(fb_size, format=normal_format)
-        t_shadingmodel = gpu.types.GPUTexture(fb_size, format="R8UI")
-        z = gpu.types.GPUTexture(fb_size, format="DEPTH_COMPONENT24")
-        gbuffer = gpu.types.GPUFrameBuffer(depth_slot=z, color_slots=(basecolor, shadowcolor, normal, t_shadingmodel))
 
-        with gbuffer.bind():
+        tscenelit = gpu.types.GPUTexture(fb_size, format=final_color_format)
+        z = gpu.types.GPUTexture(fb_size, format="DEPTH_COMPONENT24")
+
+        out_buffer = gpu.types.GPUFrameBuffer(depth_slot=z, color_slots=(tscenelit))
+
+        with out_buffer.bind():
             gpu.state.active_framebuffer_get().clear(color=(0, 0, 0, 0), depth=1.0)
-            t_shadingmodel.clear(format="UBYTE", value=tuple([0]))
 
             # Bind (fragment) shader that converts from scene linear to display space,
             # self.bind_display_space_shader(scene)
@@ -226,41 +221,7 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
             for object in self.mesh_objects:
                 draw = self.draw_calls[object.name]
                 mvp = context.region_data.window_matrix @ context.region_data.view_matrix
-                draw.draw(object.matrix_world, mvp, settings, basecolor)
-            # for key, draw in self.draw_calls.items():
-            #     print(draw.object.name, " ", draw.object.hide_viewport, flush=True)
-            #     draw.draw(draw.object.matrix_world, context.region_data, self.lights, settings)
-
-            # self.unbind_display_space_shader()
-
-        tscenelit = gpu.types.GPUTexture(fb_size, format=final_color_format)
-        lighting = gpu.types.GPUFrameBuffer(color_slots=(tscenelit))
-
-        with lighting.bind():
-            lighting.clear(color=(0, 0, 0, 0))
-            gpu.state.depth_test_set("ALWAYS")
-
-            ps_prefix = "\n#define BACKGROUND_COLOR " + ("1" if settings.world_color_clear else "0") + "\n"
-            ps_prefix += CustomRenderEngineMaterialSettings.get_shadingmodels_define()
-            shader = gpu.types.GPUShader(VERTEX_2D, ps_prefix + PIXEL_SCENE_LIGHTING)
-            shader.bind()
-            shader.uniform_float("scene_color", settings.world_color)
-            shader.uniform_sampler("tbasecolor", basecolor)
-            shader.uniform_sampler("tshadingmodel", t_shadingmodel)
-            batch_for_shader(shader, "TRI_FAN", {"pos": ((0, 0), (1, 0), (1, 1), (0, 1))}).draw(shader)
-
-            gpu.state.blend_set("ADDITIVE")
-            for light in self.lights:
-                light.draw(
-                    context.region_data,
-                    z,
-                    basecolor,
-                    shadowcolor,
-                    normal,
-                    t_shadingmodel,
-                )
-
-            gpu.state.blend_set("NONE")
+                draw.draw(object.matrix_world, mvp, settings)
 
         trgbl = gpu.types.GPUTexture(fb_size, format=final_color_format)
         rgbl = gpu.types.GPUFrameBuffer(color_slots=(trgbl))
@@ -271,53 +232,32 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
             shader.uniform_sampler("image", tscenelit)
             batch_for_shader(shader, "TRI_FAN", {"pos": ((0, 0), (1, 0), (1, 1), (0, 1))}).draw(shader)
 
+        # with fb.bind():
+        #    shader = gpu.types.GPUShader(VERTEX_2D, PIXEL_RGBL)
+        #    shader.bind()
+        #    shader.uniform_sampler("image", tscenelit)
+        #    batch_for_shader(shader, "TRI_FAN", {"pos": ((0, 0), (1, 0), (1, 1), (0, 1))}).draw(shader)
+        #    return
+
         present_pixel_shader = PIXEL_2D
 
         pixel_shader_prefix = """
             vec4 finalize_color(vec4 incolor) { return incolor; }
         """
-        match settings.out_buffer:
-            case "SCENELIT":
-                if settings.use_fxaa:
-                    out_texture = trgbl
-                    pixel_shader_prefix = """
-                        #define FXAA_GLSL_130 1
-                        #define FXAA_PC 1
-                        //#define FXAA_QUALITY__PRESET 29
-                    """
-                    if settings.use_fxaa:
-                        pixel_shader_prefix += """
-                            #define USE_FXAA 1
-                        """
-                    present_pixel_shader = PIXEL_FXAA.replace("FXAA_HEADER", open("shaders/FXAA311.glsl").read())
-                else:
-                    out_texture = tscenelit
-            case "BASECOLOR":
-                out_texture = basecolor
-            case "SHADOWCOLOR":
-                out_texture = shadowcolor
-            case "NORMAL":
-                out_texture = normal
-                pixel_shader_prefix = """
-                    vec4 finalize_color(vec4 incolor) { return incolor * 0.5 + 0.5; }
+        if settings.use_fxaa:
+            out_texture = trgbl
+            pixel_shader_prefix = """
+                #define FXAA_GLSL_130 1
+                #define FXAA_PC 1
+                //#define FXAA_QUALITY__PRESET 29
+            """
+            if settings.use_fxaa:
+                pixel_shader_prefix += """
+                    #define USE_FXAA 1
                 """
-            case "DEPTH":
-                out_texture = z
-                pixel_shader_prefix = """
-                    vec4 finalize_color(vec4 incolor)
-                    {
-                        float z = pow(incolor.x, 256);
-                        return vec4(z, z, z, 1);
-                    }
-                """
-            case "POSITION":
-                present_pixel_shader = PIXEL_DEFERRED_WORLDPOS
-                out_texture = tscenelit
-                pixel_shader_prefix = ""
-            case "SHADINGMODEL":
-                present_pixel_shader = PIXEL_SHADINGMODEL
-                pixel_shader_prefix = CustomRenderEngineMaterialSettings.get_shadingmodels_define()
-                out_texture = t_shadingmodel
+            present_pixel_shader = PIXEL_FXAA.replace("FXAA_HEADER", open("shaders/FXAA311.glsl").read())
+        else:
+            out_texture = tscenelit
 
         with fb.bind():
             if settings.world_color_clear:
