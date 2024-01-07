@@ -1,6 +1,5 @@
 import bpy, gpu, mathutils
 
-# import bmesh as bm
 from .material import CustomRenderEngineMaterialSettings
 from .default_shaders import VERTEX_SHADER, PIXEL_SHADER
 from gpu_extras.batch import batch_for_shader
@@ -119,45 +118,6 @@ class MeshDraw:
         evaluatedObj = meshObj.evaluated_get(depsgraph)
         mesh: bpy.types.Mesh = evaluatedObj.to_mesh()
 
-        """
-        if mesh.is_editmode:
-            bmesh = bm.from_edit_mesh(mesh)
-        else:
-            bmesh = bm.new()
-            bmesh.from_mesh(mesh)
-        bmesh.calc_loop_triangles()
-        bmesh.faces.ensure_lookup_table()
-
-        uv_layer = bmesh.loops.layers.uv.get("UVMap")
-        color_layer = bmesh.loops.layers.color.get("Col")
-        alpha_layer = bmesh.loops.layers.color.get("Alpha")
-
-        loops = [loop for face in bmesh.faces for loop in face.loops]
-        vertices = [loop.vert.co for loop in loops]
-        normals = [loop.calc_normal() for loop in loops]
-        if uv_layer:
-            uvs = [loop[uv_layer].uv for loop in loops]
-        else:
-            uvs = [[0, 0]] * len(vertices)
-        if color_layer:
-            color = [loop[color_layer] for loop in loops]
-        else:
-            color = [[0, 0, 0, 0]] * len(vertices)
-        if alpha_layer:
-            color_alpha = [loop[alpha_layer] for loop in loops]
-        else:
-            color_alpha = [[0, 0, 0, 0]] * len(vertices)
-
-        # split mesh by materials
-        facesByMat = {}
-        for i in range(len(bmesh.faces)):
-            face = bmesh.faces[i]
-            # print([loop.vert.co for loop in face.loops])
-            if face.material_index not in facesByMat:
-                facesByMat[face.material_index] = []
-            facesByMat[face.material_index].append([3 * i + j for j in range(3)])
-        """
-
         # calculate loops
         mesh.calc_loop_triangles()
         try:
@@ -216,7 +176,6 @@ class MeshDraw:
         self.batches = []
         for matIndex, faces in facesByMat.items():
             indices = np.array([face.loops for face in faces])
-            # indices = faces
             if matIndex < len(meshObj.material_slots):
                 material = meshObj.material_slots[matIndex]
             else:
@@ -257,7 +216,6 @@ class MeshDraw:
                     mesh_ubo,
                 )
             )
-        # bmesh.free()
 
     def create_mesh_ubo(self, material: bpy.types.Material) -> gpu.types.GPUUniformBuf:
         data = bytearray([i for i in range(16)])
