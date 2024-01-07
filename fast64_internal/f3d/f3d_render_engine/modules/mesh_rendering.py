@@ -123,7 +123,7 @@ class MeshDraw:
         # split mesh data into separate arrays
         # gpu functions take in 2D arrays, but we have to pass reshaped versions to foreach_get since that function flattens data
         vertices = np.empty((len(mesh.loops), 3), dtype=np.float32)
-        color = np.full((len(mesh.loops), 4), [0.5, 0.5, 1, 1], dtype=np.float32)
+        color = np.full((len(mesh.loops), 4), [1, 1, 1, 1], dtype=np.float32)
         color_alpha = np.full((len(mesh.loops), 4), [1, 1, 1, 1], dtype=np.float32)
         normals = np.empty((len(mesh.loops), 3), dtype=np.float32)
         uvs = np.zeros((len(mesh.loops), 2), dtype=np.float32)
@@ -184,8 +184,8 @@ class MeshDraw:
                     "position": vertices,
                     # "normal": normals,
                     "uv": uvs,
-                    # "color": color,
-                    # "color_alpha": color_alpha,
+                    "color": color,
+                    "color_alpha": color_alpha,
                 }
             else:
                 material_shader = None

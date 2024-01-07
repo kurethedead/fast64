@@ -25,6 +25,6 @@ uniform vec4 outline_color;
 
 void main()
 {
-    tscenelit = vec4(texture(tex0, texcoord).rgb, 1);
+    tscenelit = vec4(texture(tex0, texcoord).rgb, 1) * vertex_color;
     //tscenelit = vec4(1, 0, 0, 1);
 }
