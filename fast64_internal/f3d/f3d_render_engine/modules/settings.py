@@ -1,10 +1,9 @@
 import bpy
+from .operators import OBJECT_OT_Fast64TestCTypes
 
 
 class Fast64RenderEngineSettings(bpy.types.PropertyGroup):
-    backbuffer_scale: bpy.props.FloatProperty(
-        name="Backbuffer Scale", default=1.0, min=0.1, max=10
-    )
+    backbuffer_scale: bpy.props.FloatProperty(name="Backbuffer Scale", default=1.0, min=0.1, max=10)
     use_fxaa: bpy.props.BoolProperty(name="FXAA", default=True)
 
     out_buffer: bpy.props.EnumProperty(
@@ -21,12 +20,8 @@ class Fast64RenderEngineSettings(bpy.types.PropertyGroup):
         options=set(),
     )
 
-    enable_outline: bpy.props.BoolProperty(
-        name="Render Outlines", default=False, options=set()
-    )
-    outline_width: bpy.props.FloatProperty(
-        name="Outline Width", default=1, min=0, soft_max=10, options=set()
-    )
+    enable_outline: bpy.props.BoolProperty(name="Render Outlines", default=False, options=set())
+    outline_width: bpy.props.FloatProperty(name="Outline Width", default=1, min=0, soft_max=10, options=set())
     outline_color: bpy.props.FloatVectorProperty(
         name="Outline Color",
         size=4,
@@ -47,9 +42,7 @@ class Fast64RenderEngineSettings(bpy.types.PropertyGroup):
         max=1,
         options=set(),
     )
-    fresnel_fac: bpy.props.FloatProperty(
-        name="Fresnel Factor", default=0.5, min=0, max=1
-    )
+    fresnel_fac: bpy.props.FloatProperty(name="Fresnel Factor", default=0.5, min=0, max=1)
     use_vertexcolor_alpha: bpy.props.BoolProperty(
         name="Use Vertex Color Alpha",
         default=False,
@@ -76,9 +69,7 @@ class Fast64RenderEngineSettings(bpy.types.PropertyGroup):
         max=1,
         options=set(),
     )
-    world_color_clear: bpy.props.BoolProperty(
-        name="World Color Background", default=False, options=set()
-    )
+    world_color_clear: bpy.props.BoolProperty(name="World Color Background", default=False, options=set())
 
 
 class Fast64RenderEnginePanel(bpy.types.Panel):
@@ -98,6 +89,8 @@ class Fast64RenderEnginePanel(bpy.types.Panel):
         layout.use_property_decorate = True
         layout.use_property_split = True
         settings = context.scene.f3d_render_engine_settings
+
+        layout.operator(OBJECT_OT_Fast64TestCTypes.bl_idname)
         layout.prop(settings, "backbuffer_scale")
         layout.prop(settings, "use_fxaa")
         layout.prop(settings, "out_buffer")
