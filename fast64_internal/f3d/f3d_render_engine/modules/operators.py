@@ -2,6 +2,7 @@ import bpy
 import numpy as np
 import mathutils
 import bl_math
+from .pyfast64 import test_ctypes
 
 
 # Maps calculated normals into vertex color when using custom split normals
@@ -72,11 +73,6 @@ class OBJECT_OT_bake_vertex_normals(bpy.types.Operator):
         for object in context.selected_objects:
             bake_vertex_normals(object, self.write_z_component, self.merge_axis, self.merge_threshold)
         return {"FINISHED"}
-
-
-def test_ctypes(context: bpy.types.Context):
-    print("Hello CTypes!")
-    pass
 
 
 class OBJECT_OT_Fast64TestCTypes(bpy.types.Operator):
