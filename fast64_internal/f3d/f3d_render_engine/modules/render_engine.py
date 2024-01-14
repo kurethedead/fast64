@@ -13,7 +13,7 @@ from .default_shaders import (
     PIXEL_SHADINGMODEL,
     PIXEL_SCENE_LIGHTING,
 )
-from .pyfast64 import view_draw, view_update, init_renderer
+from . import pyfast64_core
 
 
 # https://docs.blender.org/api/current/bpy.types.RenderEngine.html
@@ -37,11 +37,12 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
         self.lights = []
         self.mesh_objects = []
         self.material_shaders: dict[str, MaterialShader] = dict()
-        self.render_thread: threading.Thread = init_renderer()
+        self.render_thread: threading.Thread = pyfast64_core.init_renderer()
 
     # When the render engine instance is destroy, this is called. Clean up any
     # render engine data here, for example stopping running render threads.
     def __del__(self):
+        pyfast64_core.stop_renderer()
         pass
 
     def get_settings(self, context):

@@ -2,7 +2,7 @@ import bpy
 import numpy as np
 import mathutils
 import bl_math
-from .pyfast64 import test_ctypes
+from . import pyfast64_core
 
 
 # Maps calculated normals into vertex color when using custom split normals
@@ -77,7 +77,7 @@ class OBJECT_OT_bake_vertex_normals(bpy.types.Operator):
 
 class OBJECT_OT_Fast64TestCTypes(bpy.types.Operator):
     bl_idname = "object.fast64_test_ctypes"
-    bl_label = "Test CTypes"
+    bl_label = "Test Fast64 Core"
     # bl_description = ""
     bl_options = {"REGISTER", "UNDO"}
 
@@ -88,7 +88,7 @@ class OBJECT_OT_Fast64TestCTypes(bpy.types.Operator):
         return True
 
     def execute(self, context):
-        test_ctypes(context)
+        pyfast64_core.test_print(context)
         return {"FINISHED"}
 
 
