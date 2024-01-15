@@ -1,8 +1,20 @@
 import bpy
 from .operators import OBJECT_OT_Fast64TestCTypes
+from .pyfast64_core import init_renderer
+
+# Do not use 0, which is reserved for "None" renderer.
+# These should be integer values corresponding to the RendererType enum in fast64_core.
+rendererTypes = [
+    ("1", "OpenGL", "Default high level OpenGL renderer"),
+]
+
+
+def update_renderer(self, settings: "Fast64RenderEngineSettings"):
+    init_renderer(int(settings.rendererType))
 
 
 class Fast64RenderEngineSettings(bpy.types.PropertyGroup):
+    rendererType: bpy.props.EnumProperty(name="Renderer", items=rendererTypes, update=update_renderer)
     backbuffer_scale: bpy.props.FloatProperty(name="Backbuffer Scale", default=1.0, min=0.1, max=10)
     use_fxaa: bpy.props.BoolProperty(name="FXAA", default=True)
 
@@ -91,6 +103,7 @@ class Fast64RenderEnginePanel(bpy.types.Panel):
         settings = context.scene.f3d_render_engine_settings
 
         layout.operator(OBJECT_OT_Fast64TestCTypes.bl_idname)
+        layout.prop(settings, "rendererType")
         layout.prop(settings, "backbuffer_scale")
         layout.prop(settings, "use_fxaa")
         layout.prop(settings, "out_buffer")

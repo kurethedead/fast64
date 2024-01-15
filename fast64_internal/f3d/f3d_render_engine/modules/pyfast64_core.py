@@ -6,12 +6,12 @@ import threading
 fast64_core: ctypes.CDLL = ctypes.CDLL("./modules/fast64_cored.dll", winmode=0)
 
 
-def run_renderer():
-    fast64_core.start_renderer()
+def run_renderer(rendererID):
+    fast64_core.start_renderer(rendererID)
 
 
-def init_renderer() -> threading.Thread:
-    x = threading.Thread(target=run_renderer, args=())
+def init_renderer(rendererID: int) -> threading.Thread:
+    x = threading.Thread(target=run_renderer, args=(rendererID,))
     x.start()
     return x
 

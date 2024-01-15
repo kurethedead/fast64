@@ -27,6 +27,9 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
     # Hides Cycles node trees in the node editor.
     bl_use_shading_nodes_custom = False
 
+    def get_settings(self, context) -> Fast64RenderEngineSettings:
+        return context.scene.f3d_render_engine_settings
+
     # Init is called whenever a new render engine instance is created. Multiple
     # instances may exist at the same time, for example for a viewport and final
     # render.
@@ -37,16 +40,15 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
         self.lights = []
         self.mesh_objects = []
         self.material_shaders: dict[str, MaterialShader] = dict()
-        self.render_thread: threading.Thread = pyfast64_core.init_renderer()
+        self.render_thread: threading.Thread = pyfast64_core.init_renderer(
+            int(bpy.context.scene.f3d_render_engine_settings.rendererType)
+        )
 
     # When the render engine instance is destroy, this is called. Clean up any
     # render engine data here, for example stopping running render threads.
     def __del__(self):
         pyfast64_core.stop_renderer()
         pass
-
-    def get_settings(self, context):
-        return context.scene.f3d_render_engine_settings
 
     # This is the method called by Blender for both final renders (F12) and
     # small preview for materials, world and lights.
