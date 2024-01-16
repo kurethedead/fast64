@@ -1,9 +1,14 @@
-import ctypes, bpy, gpu
+import ctypes, bpy, gpu, sys
 import threading
 
 # this runs from f3d_render_engine/__init__.py
 # shader paths must also be relative to this directory
-fast64_core: ctypes.CDLL = ctypes.CDLL("./modules/fast64_cored.dll", winmode=0)
+if sys.platform.startswith("win32"):
+    module_path = "./modules/fast64_core.pyd"
+else:
+    module_path = "./modules/fast64_core.so"
+
+fast64_core: ctypes.CDLL = ctypes.CDLL(module_path, winmode=0)
 
 
 def run_renderer(rendererID):

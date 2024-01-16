@@ -6,11 +6,12 @@ from .pyfast64_core import init_renderer
 # These should be integer values corresponding to the RendererType enum in fast64_core.
 rendererTypes = [
     ("1", "OpenGL", "Default high level OpenGL renderer"),
+    ("2", "OpenGLButAgain", "Default high level OpenGL renderer, but again for testing purposes"),
 ]
 
 
-def update_renderer(self, settings: "Fast64RenderEngineSettings"):
-    init_renderer(int(settings.rendererType))
+def update_renderer(self, context: bpy.types.Context):
+    init_renderer(int(context.scene.f3d_render_engine_settings.rendererType))
 
 
 class Fast64RenderEngineSettings(bpy.types.PropertyGroup):
