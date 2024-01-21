@@ -1,6 +1,5 @@
 import bpy
 from .operators import OBJECT_OT_Fast64TestCTypes
-from .pyfast64_core import init_renderer
 
 # Do not use 0, which is reserved for "None" renderer.
 # These should be integer values corresponding to the RendererType enum in fast64_core.
@@ -11,7 +10,8 @@ rendererTypes = [
 
 
 def update_renderer(self, context: bpy.types.Context):
-    init_renderer(int(context.scene.f3d_render_engine_settings.rendererType))
+    # init_renderer(int(context.scene.f3d_render_engine_settings.rendererType))
+    pass
 
 
 class Fast64RenderEngineSettings(bpy.types.PropertyGroup):

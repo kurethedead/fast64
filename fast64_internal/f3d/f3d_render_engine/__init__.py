@@ -14,7 +14,7 @@ path = delimiter.join(names[: len(names) - 1])
 sys.path.append(path)
 os.chdir(path)
 
-from .modules import render_engine, operators, material
+from .modules import render_engine, operators, material, fast64_core
 
 
 def render_engine_register():

@@ -13,7 +13,8 @@ from .default_shaders import (
     PIXEL_SHADINGMODEL,
     PIXEL_SCENE_LIGHTING,
 )
-from . import pyfast64_core
+import numpy as np
+from . import fast64_core
 
 
 # https://docs.blender.org/api/current/bpy.types.RenderEngine.html
@@ -40,14 +41,13 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
         self.lights = []
         self.mesh_objects = []
         self.material_shaders: dict[str, MaterialShader] = dict()
-        self.render_thread: threading.Thread = pyfast64_core.init_renderer(
-            int(bpy.context.scene.f3d_render_engine_settings.rendererType)
-        )
+        self.session = fast64_core.RenderSession(fast64_core.RenderConfig(fast64_core.RenderEngineType.OpenGL))
+        self.session.Run()
 
     # When the render engine instance is destroy, this is called. Clean up any
     # render engine data here, for example stopping running render threads.
     def __del__(self):
-        pyfast64_core.stop_renderer()
+        self.session.End()
         pass
 
     # This is the method called by Blender for both final renders (F12) and
@@ -107,6 +107,10 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
 
         # Get viewport dimensions
         dimensions = region.width, region.height
+
+        x, y, w, h = gpu.state.viewport_get()
+        fb_size = (math.floor(w), math.floor(h))
+        self.session.UpdateScene()
 
         if not self.scene_data:
             # First time initialization
@@ -206,7 +210,8 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
 
         offscr_scale = settings.backbuffer_scale
         fb_size = (math.floor(w * offscr_scale), math.floor(h * offscr_scale))
-        final_color_format = "RGBA16"
+        # final_color_format = "RGBA8"
+        final_color_format = "RGBA32F"
 
         tscenelit = gpu.types.GPUTexture(fb_size, format=final_color_format)
         z = gpu.types.GPUTexture(fb_size, format="DEPTH_COMPONENT24")
@@ -228,8 +233,20 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
                 mvp = context.region_data.window_matrix @ context.region_data.view_matrix
                 draw.draw(object.matrix_world, mvp, settings)
 
+        imageBuffer = gpu.types.Buffer(
+            "FLOAT", fb_size[0] * fb_size[1] * 4, np.array([0] * fb_size[0] * fb_size[1] * 4)
+        )
+        self.session.GetImage(imageBuffer, fb_size[0], fb_size[1])
+        tscenelit = gpu.types.GPUTexture(fb_size, format=final_color_format, data=imageBuffer)
         trgbl = gpu.types.GPUTexture(fb_size, format=final_color_format)
         rgbl = gpu.types.GPUFrameBuffer(color_slots=(trgbl))
+
+        with fb.bind():
+            shader = gpu.types.GPUShader(VERTEX_2D, PIXEL_RGBL)
+            shader.bind()
+            shader.uniform_sampler("image", tscenelit)
+            batch_for_shader(shader, "TRI_FAN", {"pos": ((0, 0), (1, 0), (1, 1), (0, 1))}).draw(shader)
+            return
 
         with rgbl.bind():
             shader = gpu.types.GPUShader(VERTEX_2D, PIXEL_RGBL)
