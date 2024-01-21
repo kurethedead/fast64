@@ -2,7 +2,8 @@ import bpy
 import numpy as np
 import mathutils
 import bl_math
-from . import fast64_core
+
+# from . import fast64_core
 
 
 # Maps calculated normals into vertex color when using custom split normals
@@ -88,7 +89,7 @@ class OBJECT_OT_Fast64TestCTypes(bpy.types.Operator):
         return True
 
     def execute(self, context):
-        fast64_core.test_print(context)
+        # fast64_core.test_print(context)
         return {"FINISHED"}
 
 

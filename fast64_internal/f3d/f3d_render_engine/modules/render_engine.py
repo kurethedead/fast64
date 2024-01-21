@@ -41,6 +41,8 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
         self.lights = []
         self.mesh_objects = []
         self.material_shaders: dict[str, MaterialShader] = dict()
+        self.data = np.array([0])
+        self.buffer = gpu.types.Buffer("FLOAT", 1, self.data)
         self.session = fast64_core.RenderSession(fast64_core.RenderConfig(fast64_core.RenderEngineType.OpenGL))
         self.session.Run()
 
@@ -202,7 +204,6 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
 
         # Get viewport dimensions
         dimensions = region.width, region.height
-
         settings = self.get_settings(context)
 
         fb = gpu.state.active_framebuffer_get()  # it's framebuffer_active_get in the api docs wtf?
@@ -213,105 +214,19 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
         # final_color_format = "RGBA8"
         final_color_format = "RGBA32F"
 
-        tscenelit = gpu.types.GPUTexture(fb_size, format=final_color_format)
-        z = gpu.types.GPUTexture(fb_size, format="DEPTH_COMPONENT24")
-
-        out_buffer = gpu.types.GPUFrameBuffer(depth_slot=z, color_slots=(tscenelit))
-
-        with out_buffer.bind():
-            gpu.state.active_framebuffer_get().clear(color=settings.world_color, depth=1.0)
-
-            # Bind (fragment) shader that converts from scene linear to display space,
-            # self.bind_display_space_shader(scene)
-
-            gpu.state.depth_test_set("LESS")
-            gpu.state.depth_mask_set(True)
-            gpu.state.face_culling_set("BACK")
-
-            for object in self.mesh_objects:
-                draw = self.draw_calls[object.name]
-                mvp = context.region_data.window_matrix @ context.region_data.view_matrix
-                draw.draw(object.matrix_world, mvp, settings)
-
-        imageBuffer = gpu.types.Buffer(
-            "FLOAT", fb_size[0] * fb_size[1] * 4, np.array([0] * fb_size[0] * fb_size[1] * 4)
-        )
-        self.session.GetImage(imageBuffer, fb_size[0], fb_size[1])
-        tscenelit = gpu.types.GPUTexture(fb_size, format=final_color_format, data=imageBuffer)
-        trgbl = gpu.types.GPUTexture(fb_size, format=final_color_format)
-        rgbl = gpu.types.GPUFrameBuffer(color_slots=(trgbl))
+        dataSize = fb_size[0] * fb_size[1] * 4
+        if self.data.size != dataSize:
+            print(f"Changing framebuffer size: {self.data.size} vs. {dataSize}")
+            self.data = np.zeros(dataSize)
+            self.buffer = gpu.types.Buffer("FLOAT", dataSize, self.data)
+        self.session.GetImage(self.buffer, fb_size[0], fb_size[1])
+        colorTexture = gpu.types.GPUTexture(fb_size, format=final_color_format, data=self.buffer)
 
         with fb.bind():
             shader = gpu.types.GPUShader(VERTEX_2D, PIXEL_RGBL)
             shader.bind()
-            shader.uniform_sampler("image", tscenelit)
+            shader.uniform_sampler("image", colorTexture)
             batch_for_shader(shader, "TRI_FAN", {"pos": ((0, 0), (1, 0), (1, 1), (0, 1))}).draw(shader)
-            return
-
-        with rgbl.bind():
-            shader = gpu.types.GPUShader(VERTEX_2D, PIXEL_RGBL)
-            shader.bind()
-            shader.uniform_sampler("image", tscenelit)
-            batch_for_shader(shader, "TRI_FAN", {"pos": ((0, 0), (1, 0), (1, 1), (0, 1))}).draw(shader)
-
-        # with fb.bind():
-        #    shader = gpu.types.GPUShader(VERTEX_2D, PIXEL_RGBL)
-        #    shader.bind()
-        #    shader.uniform_sampler("image", tscenelit)
-        #    batch_for_shader(shader, "TRI_FAN", {"pos": ((0, 0), (1, 0), (1, 1), (0, 1))}).draw(shader)
-        #    return
-
-        present_pixel_shader = PIXEL_2D
-
-        pixel_shader_prefix = """
-            vec4 finalize_color(vec4 incolor) { return incolor; }
-        """
-        if settings.use_fxaa:
-            out_texture = trgbl
-            pixel_shader_prefix = """
-                #define FXAA_GLSL_130 1
-                #define FXAA_PC 1
-                //#define FXAA_QUALITY__PRESET 29
-            """
-            if settings.use_fxaa:
-                pixel_shader_prefix += """
-                    #define USE_FXAA 1
-                """
-            present_pixel_shader = PIXEL_FXAA.replace("FXAA_HEADER", open("shaders/FXAA311.glsl").read())
-        else:
-            out_texture = tscenelit
-
-        with fb.bind():
-            if settings.world_color_clear:
-                fb.clear(color=settings.world_color)
-            fb.clear(depth=1.0)
-
-            gpu.state.depth_test_set("ALWAYS")
-            gpu.state.depth_mask_set(True)
-
-            coords = ((0, 0), (1, 0), (1, 1), (0, 1))
-            shader = gpu.types.GPUShader(VERTEX_2D, pixel_shader_prefix + present_pixel_shader)
-            vbo = gpu.types.GPUVertBuf(shader.format_calc(), 4)
-            vbo.attr_fill("pos", coords)
-            batch = gpu.types.GPUBatch(type="TRI_FAN", buf=vbo)
-            shader.bind()
-            shader.uniform_sampler("image", out_texture)
-            shader.uniform_sampler("depth", z)
-            if settings.out_buffer == "POSITION":
-                region_data = context.region_data
-                # shader.uniform_float("mat_view", region_data.view_matrix)
-                # shader.uniform_float("mat_projection", region_data.window_matrix)
-                shader.uniform_float(
-                    "mat_view_projection",
-                    region_data.window_matrix @ region_data.view_matrix,
-                )
-            # shader.uniform_int("view_size", (w, h))
-            # shader.uniform_int("buffer_size", (rgb.width, rgb.height))
-            try:
-                shader.uniform_float("invScreenSize", (1.0 / w, 1.0 / h))
-            except ValueError:
-                pass
-            batch.draw(shader)
 
 
 # RenderEngines also need to tell UI Panels that they are compatible with.
