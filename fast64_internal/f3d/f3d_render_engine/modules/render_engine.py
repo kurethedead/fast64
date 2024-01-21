@@ -209,12 +209,14 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
         fb = gpu.state.active_framebuffer_get()  # it's framebuffer_active_get in the api docs wtf?
         x, y, w, h = gpu.state.viewport_get()
 
+        scale = 0.25
         offscr_scale = settings.backbuffer_scale
-        fb_size = (math.floor(w * offscr_scale), math.floor(h * offscr_scale))
+        fb_size = (math.floor(w * offscr_scale * scale), math.floor(h * offscr_scale * scale))
         # final_color_format = "RGBA8"
         final_color_format = "RGBA32F"
 
-        dataSize = fb_size[0] * fb_size[1] * 4
+        componentSize = 4
+        dataSize = fb_size[0] * fb_size[1] * componentSize
         if self.data.size != dataSize:
             print(f"Changing framebuffer size: {self.data.size} vs. {dataSize}")
             self.data = np.zeros(dataSize)
