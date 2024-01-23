@@ -205,6 +205,7 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
     def view_draw(self, context, depsgraph):
         region = context.region
         scene = depsgraph.scene
+        view3d = context.space_data
 
         # Get viewport dimensions
         dimensions = region.width, region.height
@@ -226,7 +227,7 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
             # This internally replaces buffer but in python we still have to manually do this
             # This is in order to keep reference to old buffer while in use
             oldBuffers = self.buffers
-            newBuffers = [gpu.types.Buffer("FLOAT", fb_size, np.zeros(fb_size)) for i in range(numBuffers)]
+            newBuffers = [gpu.types.Buffer("FLOAT", fb_size, np.full(fb_size, 1)) for i in range(numBuffers)]
             self.session.ReplaceBuffers(newBuffers)
             self.buffers = newBuffers
 
