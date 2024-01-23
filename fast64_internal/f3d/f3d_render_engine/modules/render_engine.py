@@ -41,10 +41,10 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
         self.lights = []
         self.mesh_objects = []
         self.material_shaders: dict[str, MaterialShader] = dict()
-        self.data = np.array([0])
-        self.buffer = gpu.types.Buffer("FLOAT", 1, self.data)
+        self.buffers = [gpu.types.Buffer("FLOAT", (1, 1, 4), np.array([[[1, 1, 1, 1]]]))] * 3
         self.session = fast64_core.RenderSession(fast64_core.RenderConfig(fast64_core.RenderEngineType.OpenGL))
-        self.session.Run()
+        self.session.Run(self.buffers)
+        self.prevDimensions = (1, 1, 4)
 
     # When the render engine instance is destroy, this is called. Clean up any
     # render engine data here, for example stopping running render threads.
@@ -210,19 +210,24 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
         x, y, w, h = gpu.state.viewport_get()
 
         scale = 0.25
+        componentSize = 4
         offscr_scale = settings.backbuffer_scale
-        fb_size = (math.floor(w * offscr_scale * scale), math.floor(h * offscr_scale * scale))
+        fb_size = (math.floor(w * offscr_scale * scale), math.floor(h * offscr_scale * scale), componentSize)
         # final_color_format = "RGBA8"
         final_color_format = "RGBA32F"
 
-        componentSize = 4
-        dataSize = fb_size[0] * fb_size[1] * componentSize
-        if self.data.size != dataSize:
-            print(f"Changing framebuffer size: {self.data.size} vs. {dataSize}")
-            self.data = np.zeros(dataSize)
-            self.buffer = gpu.types.Buffer("FLOAT", dataSize, self.data)
-        self.session.GetImage(self.buffer, fb_size[0], fb_size[1])
-        colorTexture = gpu.types.GPUTexture(fb_size, format=final_color_format, data=self.buffer)
+        nextBufferIndex = self.session.GetImage()
+        nextBuffer = self.buffers[nextBufferIndex]
+        if tuple(nextBuffer.dimensions) != tuple(fb_size):
+            # This internally replaces buffer but in python we still have to manually do this
+            # This is in order to keep reference to old buffer while in use
+            newBuffer = gpu.types.Buffer("FLOAT", fb_size, np.zeros(fb_size))
+            self.session.ReplaceBufferAt(nextBufferIndex, newBuffer)
+            self.buffers[nextBufferIndex] = newBuffer
+
+        if nextBufferIndex == -1:
+            return
+        colorTexture = gpu.types.GPUTexture(nextBuffer.dimensions[0:2], format=final_color_format, data=nextBuffer)
 
         with fb.bind():
             shader = gpu.types.GPUShader(VERTEX_2D, PIXEL_RGBL)
