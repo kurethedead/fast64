@@ -16,6 +16,10 @@ from .default_shaders import (
 import numpy as np
 from . import fast64_core
 
+numBuffers = 2
+scale = 0.25
+componentSize = 4
+
 
 # https://docs.blender.org/api/current/bpy.types.RenderEngine.html
 class Fast64RenderEngine(bpy.types.RenderEngine):
@@ -41,7 +45,7 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
         self.lights = []
         self.mesh_objects = []
         self.material_shaders: dict[str, MaterialShader] = dict()
-        self.buffers = [gpu.types.Buffer("FLOAT", (1, 1, 4), np.array([[[1, 1, 1, 1]]]))] * 3
+        self.buffers = [gpu.types.Buffer("FLOAT", (1, 1, 4), np.array([[[1, 1, 1, 1]]]))] * numBuffers
         self.session = fast64_core.RenderSession(fast64_core.RenderConfig(fast64_core.RenderEngineType.OpenGL))
         self.session.Run(self.buffers)
         self.prevDimensions = (1, 1, 4)
@@ -209,8 +213,6 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
         fb = gpu.state.active_framebuffer_get()  # it's framebuffer_active_get in the api docs wtf?
         x, y, w, h = gpu.state.viewport_get()
 
-        scale = 0.25
-        componentSize = 4
         offscr_scale = settings.backbuffer_scale
         fb_size = (math.floor(w * offscr_scale * scale), math.floor(h * offscr_scale * scale), componentSize)
         # final_color_format = "RGBA8"
@@ -218,15 +220,20 @@ class Fast64RenderEngine(bpy.types.RenderEngine):
 
         nextBufferIndex = self.session.GetImage()
         nextBuffer = self.buffers[nextBufferIndex]
+        oldBuffers = []  # used to keep references until rendering complete ??
         if tuple(nextBuffer.dimensions) != tuple(fb_size):
+            print(f"Buffer replacement: {tuple(nextBuffer.dimensions)} != {tuple(fb_size)}")
             # This internally replaces buffer but in python we still have to manually do this
             # This is in order to keep reference to old buffer while in use
-            newBuffer = gpu.types.Buffer("FLOAT", fb_size, np.zeros(fb_size))
-            self.session.ReplaceBufferAt(nextBufferIndex, newBuffer)
-            self.buffers[nextBufferIndex] = newBuffer
+            oldBuffers = self.buffers
+            newBuffers = [gpu.types.Buffer("FLOAT", fb_size, np.zeros(fb_size)) for i in range(numBuffers)]
+            self.session.ReplaceBuffers(newBuffers)
+            self.buffers = newBuffers
 
         if nextBufferIndex == -1:
             return
+
+        # GPUTexture dimensions exclude the third dimension (size of each pixel)
         colorTexture = gpu.types.GPUTexture(nextBuffer.dimensions[0:2], format=final_color_format, data=nextBuffer)
 
         with fb.bind():
