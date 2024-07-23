@@ -1,42 +1,18 @@
-import bpy, os, mathutils
-from ..f3d.f3d_writer import TriangleConverterInfo, saveStaticModel, getInfoDict
-from .oot_model_classes import OOTModel
-from .oot_f3d_writer import writeTextureArraysExisting1D
+import os, bpy, mathutils
+from ....f3d.f3d_writer import TriangleConverterInfo, saveStaticModel, getInfoDict
 
-from ..utility import (
+from ....utility import (
     PluginError,
     toAlnum,
-    readFile,
-    writeFile,
 )
 
-from .oot_utility import (
+from ...oot_utility import (
     CullGroup,
     checkUniformScale,
     ootConvertTranslation,
 )
 
-from .oot_level_classes import OOTDLGroup
-
-
-def writeTextureArraysExistingScene(fModel: OOTModel, exportPath: str, sceneInclude: str):
-    drawConfigPath = os.path.join(exportPath, "src/code/z_scene_table.c")
-    drawConfigData = readFile(drawConfigPath)
-    newData = drawConfigData
-
-    if f'#include "{sceneInclude}"' not in newData:
-        additionalIncludes = f'#include "{sceneInclude}"\n'
-    else:
-        additionalIncludes = ""
-
-    for flipbook in fModel.flipbooks:
-        if flipbook.exportMode == "Array":
-            newData = writeTextureArraysExisting1D(newData, flipbook, additionalIncludes)
-        else:
-            raise PluginError("Scenes can only use array flipbooks.")
-
-    if newData != drawConfigData:
-        writeFile(drawConfigPath, newData)
+from ...oot_level_classes import OOTDLGroup
 
 
 class BoundingBox:
