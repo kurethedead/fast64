@@ -10,7 +10,6 @@ from mathutils import Matrix, Vector
 from ...f3d.f3d_gbi import TextureExportSettings, DLFormat
 from ...utility import PluginError, raisePluginError, ootGetSceneOrRoomHeader
 from ..oot_utility import ExportInfo, RemoveInfo, sceneNameFromID
-from ..oot_level_writer import ootExportSceneToC
 from ..oot_constants import ootEnumMusicSeq, ootEnumSceneID
 from ..oot_level_parser import parseScene
 from ..exporter.decomp_edit.config import Config

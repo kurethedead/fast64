@@ -2,233 +2,13 @@ import bpy
 import os
 import shutil
 
-from typing import Optional
-from bpy.types import Object
 from ..utility import PluginError, toAlnum, indent
-from .collision.exporter import OOTCollision
-from .oot_model_classes import OOTModel
 from ..f3d.f3d_gbi import (
     SPDisplayList,
     SPEndDisplayList,
     GfxListTag,
     GfxList,
 )
-
-
-class OOTCommonCommands:
-    def getAltHeaderListCmd(self, altName):
-        return indent + f"SCENE_CMD_ALTERNATE_HEADER_LIST({altName}),\n"
-
-    def getEndCmd(self):
-        return indent + "SCENE_CMD_END(),\n"
-
-
-class OOTActor:
-    def __init__(self, actorName, actorID, position, rotation, actorParam):
-        self.actorName = actorName
-        self.actorID = actorID
-        self.actorParam = actorParam
-        self.position = position
-        self.rotation = rotation
-
-
-class OOTTransitionActor:
-    def __init__(self, actorName, actorID, frontRoom, backRoom, frontCam, backCam, position, rotationY, actorParam):
-        self.actorName = actorName
-        self.actorID = actorID
-        self.actorParam = actorParam
-        self.frontRoom = frontRoom
-        self.backRoom = backRoom
-        self.frontCam = frontCam
-        self.backCam = backCam
-        self.position = position
-        self.rotationY = rotationY
-
-
-class OOTExit:
-    def __init__(self, index):
-        self.index = index
-
-
-class OOTEntrance:
-    def __init__(self, roomIndex, startPositionIndex):
-        self.roomIndex = roomIndex
-        self.startPositionIndex = startPositionIndex
-
-
-class OOTLight:
-    def __init__(self):
-        self.ambient = (0, 0, 0)
-        self.diffuse0 = (0, 0, 0)
-        self.diffuseDir0 = (0, 0, 0)
-        self.diffuse1 = (0, 0, 0)
-        self.diffuseDir1 = (0, 0, 0)
-        self.fogColor = (0, 0, 0)
-        self.fogNear = 0
-        self.fogFar = 0
-        self.transitionSpeed = 0
-
-    def getBlendFogNear(self):
-        return f"(({self.transitionSpeed} << 10) | {self.fogNear})"
-
-
-class OOTSceneTableEntry:
-    def __init__(self):
-        self.drawConfig = 0
-
-
-class OOTScene(OOTCommonCommands):
-    def __init__(self, name, model):
-        self.name: str = toAlnum(name)
-        self.write_dummy_room_list = False
-        self.rooms = {}
-        self.transitionActorList = set()
-        self.entranceList = set()
-        self.startPositions = {}
-        self.lights = []
-        self.model = model
-        self.collision = OOTCollision(self.name)
-
-        self.globalObject = None
-        self.naviCup = None
-
-        # Skybox
-        self.skyboxID = None
-        self.skyboxCloudiness = None
-        self.skyboxLighting = None
-        self.isSkyboxLightingCustom = False
-
-        # Camera
-        self.mapLocation = None
-        self.cameraMode = None
-
-        self.musicSeq = None
-        self.nightSeq = None
-
-        self.childNightHeader: Optional[OOTScene] = None
-        self.adultDayHeader: Optional[OOTScene] = None
-        self.adultNightHeader: Optional[OOTScene] = None
-        self.cutsceneHeaders: list["OOTScene"] = []
-
-        self.exitList = []
-        self.pathList = set()
-        self.cameraList = []
-
-        self.writeCutscene = False
-        self.csWriteType = "Object"
-        self.csName = ""
-        self.csWriteCustom = ""
-        self.extraCutscenes: list[Object] = []
-
-        self.sceneTableEntry = OOTSceneTableEntry()
-
-    def getAlternateHeaderScene(self, name):
-        scene = OOTScene(name, self.model)
-        scene.write_dummy_room_list = self.write_dummy_room_list
-        scene.rooms = self.rooms
-        scene.collision = self.collision
-        scene.exitList = []
-        scene.pathList = set()
-        scene.cameraList = self.cameraList
-        return scene
-
-    def sceneName(self):
-        return self.name + "_scene"
-
-    def roomListName(self):
-        return self.sceneName() + "_roomList"
-
-    def entranceListName(self, headerIndex):
-        return self.sceneName() + "_header" + format(headerIndex, "02") + "_entranceList"
-
-    def startPositionsName(self, headerIndex):
-        return f"{self.sceneName()}_header{headerIndex:02}_playerEntryList"
-
-    def exitListName(self, headerIndex):
-        return self.sceneName() + "_header" + format(headerIndex, "02") + "_exitList"
-
-    def lightListName(self, headerIndex):
-        return self.sceneName() + "_header" + format(headerIndex, "02") + "_lightSettings"
-
-    def transitionActorListName(self, headerIndex):
-        return self.sceneName() + "_header" + format(headerIndex, "02") + "_transitionActors"
-
-    def pathListName(self, headerIndex: int):
-        return self.sceneName() + "_pathway" + str(headerIndex)
-
-    def cameraListName(self):
-        return self.sceneName() + "_cameraList"
-
-    def alternateHeadersName(self):
-        return self.sceneName() + "_alternateHeaders"
-
-    def hasAlternateHeaders(self):
-        return not (
-            self.childNightHeader == None
-            and self.adultDayHeader == None
-            and self.adultNightHeader == None
-            and len(self.cutsceneHeaders) == 0
-        )
-
-    def validateIndices(self):
-        self.collision.cameraData.validateCamPositions()
-        self.validateStartPositions()
-        self.validateRoomIndices()
-
-    def validateStartPositions(self):
-        count = 0
-        while count < len(self.startPositions):
-            if count not in self.startPositions:
-                raise PluginError(
-                    "Error: Entrances (start positions) do not have a consecutive list of indices. "
-                    + "Missing index: "
-                    + str(count)
-                )
-            count = count + 1
-
-    def validateRoomIndices(self):
-        count = 0
-        while count < len(self.rooms):
-            if count not in self.rooms:
-                raise PluginError(
-                    "Error: Room indices do not have a consecutive list of indices. " + "Missing index: " + str(count)
-                )
-            count = count + 1
-
-    def validatePathIndices(self):
-        count = 0
-        while count < len(self.pathList):
-            if count not in self.pathList:
-                raise PluginError(
-                    "Error: Path list does not have a consecutive list of indices.\n" + "Missing index: " + str(count)
-                )
-            count = count + 1
-
-    def addRoom(self, roomIndex, roomName, roomShape):
-        roomModel = self.model.addSubModel(OOTModel(roomName + "_dl", self.model.DLFormat, None))
-        room = OOTRoom(roomIndex, roomName, roomModel, roomShape)
-        if roomIndex in self.rooms:
-            raise PluginError("Repeat room index " + str(roomIndex) + " for " + str(roomName))
-        self.rooms[roomIndex] = room
-        return room
-
-    def sortEntrances(self):
-        self.entranceList = sorted(self.entranceList, key=lambda x: x.startPositionIndex)
-        if self.appendNullEntrance:
-            self.entranceList.append(OOTEntrance(0, 0))
-
-        if self.childNightHeader is not None:
-            self.childNightHeader.sortEntrances()
-        if self.adultDayHeader is not None:
-            self.adultDayHeader.sortEntrances()
-        if self.adultNightHeader is not None:
-            self.adultNightHeader.sortEntrances()
-        for header in self.cutsceneHeaders:
-            header.sortEntrances()
-
-    def copyBgImages(self, exportPath: str):
-        for i in range(len(self.rooms)):
-            self.rooms[i].mesh.copyBgImages(exportPath)
 
 
 class OOTBGImage:
@@ -370,7 +150,7 @@ class OOTRoomMeshGroup:
         return self.roomName + "_entry_" + str(self.entryIndex)
 
 
-class OOTRoom(OOTCommonCommands):
+class OOTRoom:
     def __init__(self, index, name, model, roomShape):
         self.ownerName = toAlnum(name)
         self.index = index
@@ -409,6 +189,12 @@ class OOTRoom(OOTCommonCommands):
 
         self.appendNullEntrance = False
 
+    def getAltHeaderListCmd(self, altName):
+        return indent + f"SCENE_CMD_ALTERNATE_HEADER_LIST({altName}),\n"
+
+    def getEndCmd(self):
+        return indent + "SCENE_CMD_END(),\n"
+
     def getAlternateHeaderRoom(self, name):
         room = OOTRoom(self.index, name, self.mesh.model, self.mesh.roomShape)
         room.mesh = self.mesh
@@ -439,81 +225,3 @@ class OOTRoom(OOTCommonCommands):
 
     def getActorLengthDefineName(self, headerIndex: int):
         return f"LENGTH_{self.actorListName(headerIndex).upper()}"
-
-
-def addActor(owner, actor, actorProp, propName, actorObjName):
-    sceneSetup = actorProp.headerSettings
-    if (
-        sceneSetup.sceneSetupPreset == "All Scene Setups"
-        or sceneSetup.sceneSetupPreset == "All Non-Cutscene Scene Setups"
-    ):
-        getattr(owner, propName).add(actor)
-        if owner.childNightHeader is not None:
-            getattr(owner.childNightHeader, propName).add(actor)
-        if owner.adultDayHeader is not None:
-            getattr(owner.adultDayHeader, propName).add(actor)
-        if owner.adultNightHeader is not None:
-            getattr(owner.adultNightHeader, propName).add(actor)
-        if sceneSetup.sceneSetupPreset == "All Scene Setups":
-            for cutsceneHeader in owner.cutsceneHeaders:
-                getattr(cutsceneHeader, propName).add(actor)
-    elif sceneSetup.sceneSetupPreset == "Custom":
-        if sceneSetup.childDayHeader and owner is not None:
-            getattr(owner, propName).add(actor)
-        if sceneSetup.childNightHeader and owner.childNightHeader is not None:
-            getattr(owner.childNightHeader, propName).add(actor)
-        if sceneSetup.adultDayHeader and owner.adultDayHeader is not None:
-            getattr(owner.adultDayHeader, propName).add(actor)
-        if sceneSetup.adultNightHeader and owner.adultNightHeader is not None:
-            getattr(owner.adultNightHeader, propName).add(actor)
-        for cutsceneHeader in sceneSetup.cutsceneHeaders:
-            if cutsceneHeader.headerIndex >= len(owner.cutsceneHeaders) + 4:
-                raise PluginError(
-                    actorObjName
-                    + " uses a cutscene header index that is outside the range of the current number of cutscene headers."
-                )
-            getattr(owner.cutsceneHeaders[cutsceneHeader.headerIndex - 4], propName).add(actor)
-    else:
-        raise PluginError("Unhandled scene setup preset: " + str(sceneSetup.sceneSetupPreset))
-
-
-def addStartPosition(scene, index, actor, actorProp, actorObjName):
-    sceneSetup = actorProp.headerSettings
-    if (
-        sceneSetup.sceneSetupPreset == "All Scene Setups"
-        or sceneSetup.sceneSetupPreset == "All Non-Cutscene Scene Setups"
-    ):
-        addStartPosAtIndex(scene.startPositions, index, actor)
-        if scene.childNightHeader is not None:
-            addStartPosAtIndex(scene.childNightHeader.startPositions, index, actor)
-        if scene.adultDayHeader is not None:
-            addStartPosAtIndex(scene.adultDayHeader.startPositions, index, actor)
-        if scene.adultNightHeader is not None:
-            addStartPosAtIndex(scene.adultNightHeader.startPositions, index, actor)
-        if sceneSetup.sceneSetupPreset == "All Scene Setups":
-            for cutsceneHeader in scene.cutsceneHeaders:
-                addStartPosAtIndex(cutsceneHeader.startPositions, index, actor)
-    elif sceneSetup.sceneSetupPreset == "Custom":
-        if sceneSetup.childDayHeader and scene is not None:
-            addStartPosAtIndex(scene.startPositions, index, actor)
-        if sceneSetup.childNightHeader and scene.childNightHeader is not None:
-            addStartPosAtIndex(scene.childNightHeader.startPositions, index, actor)
-        if sceneSetup.adultDayHeader and scene.adultDayHeader is not None:
-            addStartPosAtIndex(scene.adultDayHeader.startPositions, index, actor)
-        if sceneSetup.adultNightHeader and scene.adultNightHeader is not None:
-            addStartPosAtIndex(scene.adultNightHeader.startPositions, index, actor)
-        for cutsceneHeader in sceneSetup.cutsceneHeaders:
-            if cutsceneHeader.headerIndex >= len(scene.cutsceneHeaders) + 4:
-                raise PluginError(
-                    actorObjName
-                    + " uses a cutscene header index that is outside the range of the current number of cutscene headers."
-                )
-            addStartPosAtIndex(scene.cutsceneHeaders[cutsceneHeader.headerIndex - 4].startPositions, index, actor)
-    else:
-        raise PluginError("Unhandled scene setup preset: " + str(sceneSetup.sceneSetupPreset))
-
-
-def addStartPosAtIndex(startPosDict, index, value):
-    if index in startPosDict:
-        raise PluginError("Error: Repeated start position spawn index: " + str(index))
-    startPosDict[index] = value
