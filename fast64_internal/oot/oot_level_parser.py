@@ -273,7 +273,10 @@ def parseScene(
 
     if not settings.isCustomDest:
         setCustomProperty(
-            sceneObj.ootSceneHeader.sceneTableEntry, "drawConfig", SceneTableUtility.get_draw_config(sceneName), ootEnumDrawConfig
+            sceneObj.ootSceneHeader.sceneTableEntry,
+            "drawConfig",
+            SceneTableUtility.get_draw_config(sceneName),
+            ootEnumDrawConfig,
         )
 
     if bpy.context.scene.fast64.oot.headerTabAffectsVisibility:
