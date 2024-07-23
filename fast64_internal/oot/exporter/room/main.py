@@ -5,7 +5,7 @@ from bpy.types import Object
 from ....utility import PluginError, CData, indent, readFile, writeFile
 from ....f3d.f3d_gbi import ScrollMethod, TextureExportSettings
 from ...room.properties import OOTRoomHeaderProperty
-from ...oot_object import addMissingObjectsToAllRoomHeadersNew
+from ...oot_object import addMissingObjectsToAllRoomHeaders
 from ...oot_level_classes import OOTRoomMesh
 from ...oot_model_classes import OOTModel, OOTGfxFormatter
 from ...oot_utility import CullGroup
@@ -94,7 +94,7 @@ class Room:
             headers.extend([altHeader.childNight, altHeader.adultDay, altHeader.adultNight])
             if len(altHeader.cutscenes) > 0:
                 headers.extend(altHeader.cutscenes)
-        addMissingObjectsToAllRoomHeadersNew(roomObj, headers)
+        addMissingObjectsToAllRoomHeaders(roomObj, headers)
 
         # Mesh stuff
         mesh = OOTRoomMesh(name, roomShapeType, model)
