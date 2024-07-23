@@ -74,7 +74,7 @@ class SceneExport:
     def export(originalSceneObj: Object, transform: Matrix, exportInfo: ExportInfo):
         """Main function"""
         # circular import fixes
-        from ..scene.exporter.to_c import setBootupScene
+        from .decomp_edit.config import Config
         from ..oot_level_writer import writeTextureArraysExistingScene
 
         checkObjectReference(originalSceneObj, "Scene object")
@@ -112,7 +112,7 @@ class SceneExport:
 
         hackerootBootOption = exportInfo.hackerootBootOption
         if hackerootBootOption is not None and hackerootBootOption.bootToScene:
-            setBootupScene(
+            Config.setBootupScene(
                 os.path.join(exportPath, "include/config/config_debug.h")
                 if not isCustomExport
                 else os.path.join(path, "config_bootup.h"),

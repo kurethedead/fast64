@@ -13,7 +13,7 @@ from ..oot_utility import ExportInfo, RemoveInfo, sceneNameFromID
 from ..oot_level_writer import ootExportSceneToC
 from ..oot_constants import ootEnumMusicSeq, ootEnumSceneID
 from ..oot_level_parser import parseScene
-from .exporter.to_c import clearBootupScene, modifySceneTable, editSpecFile, deleteSceneFiles
+from ..exporter.decomp_edit.config import Config
 from ..exporter import SceneExport, Files
 
 
@@ -94,7 +94,7 @@ class OOT_ClearBootupScene(Operator):
     bl_options = {"REGISTER", "UNDO", "PRESET"}
 
     def execute(self, context):
-        clearBootupScene(os.path.join(abspath(context.scene.ootDecompPath), "include/config/config_debug.h"))
+        Config.clearBootupScene(os.path.join(abspath(context.scene.ootDecompPath), "include/config/config_debug.h"))
         self.report({"INFO"}, "Success!")
         return {"FINISHED"}
 

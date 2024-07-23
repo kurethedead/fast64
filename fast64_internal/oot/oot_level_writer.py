@@ -34,15 +34,6 @@ from ..utility import (
     writeFile,
 )
 
-from .scene.exporter.to_c import (
-    setBootupScene,
-    getIncludes,
-    getSceneC,
-    modifySceneTable,
-    editSpecFile,
-    modifySceneFiles,
-)
-
 from .oot_utility import (
     OOTObjectCategorizer,
     CullGroup,
