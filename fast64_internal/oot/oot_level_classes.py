@@ -9,6 +9,7 @@ from ..f3d.f3d_gbi import (
     GfxListTag,
     GfxList,
 )
+from ..f3d.occlusion_planes.exporter import OcclusionPlaneCandidatesList
 
 
 class OOTBGImage:
