@@ -441,18 +441,6 @@ class RoomShapeCullable(RoomShape):
         self.dl_entries.append(entry)
         return entry
 
-    # def to_c_cull_entries(self) -> CData:
-    #    info_data = CData()
-    #    list_name = f"RoomShapeCullableEntry {self.name}[{len(self.entries)}]"
-    #
-    #    # .h
-    #    info_data.header = f"extern {list_name};\n"
-    #
-    #    # .c
-    #    info_data.source = list_name + " = {\n" + f"".join(elem.to_c() for elem in self.dl_entries) + "};\n\n"
-    #
-    #    return info_data
-
     def to_c_dl_entries(self):
         info_data = CData()
         list_name = f"RoomShapeCullableEntry {self.dl_entry_array_name}[{len(self.dl_entries)}]"
@@ -552,7 +540,6 @@ class RoomShapeUtility:
         room_shape.terminate_dls()
         room_shape.remove_unused_entries()
         return room_shape
-        # roomShape = RoomShape.new(room_shape_type, mainHeaderProps, mesh, sceneName, name)
 
 
 class BoundingBox:
@@ -588,8 +575,6 @@ class BoundingBox:
             distance = (Vector(point) - centroid).length
             if distance > radius:
                 radius = distance
-
-        # print(f"Radius: {radius}, Centroid: {centroid}")
 
         transformedCentroid = [round(value) for value in centroid]
         transformedRadius = round(radius)

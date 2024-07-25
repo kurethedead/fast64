@@ -10,8 +10,6 @@ from ...oot_model_classes import OOTModel, OOTGfxFormatter
 from ..file import RoomFile
 from ..utility import Utility, altHeaderList
 from .header import RoomAlternateHeader, RoomHeader
-
-# from .shape import RoomShape
 from .shape import RoomShapeUtility, RoomShape, RoomShapeImageMulti, RoomShapeImageBase
 
 
