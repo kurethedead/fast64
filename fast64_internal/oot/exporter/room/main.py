@@ -6,13 +6,14 @@ from ....utility import PluginError, CData, indent, readFile, writeFile
 from ....f3d.f3d_gbi import ScrollMethod, TextureExportSettings
 from ...room.properties import OOTRoomHeaderProperty
 from ...oot_object import addMissingObjectsToAllRoomHeaders
-from ...oot_level_classes import OOTRoomMesh
 from ...oot_model_classes import OOTModel, OOTGfxFormatter
 from ...oot_utility import CullGroup
 from ..file import RoomFile
 from ..utility import Utility, altHeaderList
 from .header import RoomAlternateHeader, RoomHeader
-from .shape import RoomShape
+
+# from .shape import RoomShape
+from .shape import RoomShapeUtility, RoomShape, RoomShapeImageMulti, RoomShapeImageBase
 from .mesh import ootProcessMesh, BoundingBox
 
 
@@ -24,7 +25,6 @@ class Room:
     roomIndex: int
     mainHeader: Optional[RoomHeader]
     altHeader: Optional[RoomAlternateHeader]
-    mesh: Optional[OOTRoomMesh]
     roomShape: Optional[RoomShape]
     hasAlternateHeaders: bool
 
@@ -96,27 +96,10 @@ class Room:
                 headers.extend(altHeader.cutscenes)
         addMissingObjectsToAllRoomHeaders(roomObj, headers)
 
-        # Mesh stuff
-        mesh = OOTRoomMesh(name, roomShapeType, model)
-        pos, _, scale, _ = Utility.getConvertedTransform(transform, sceneObj, roomObj, True)
-        cullGroup = CullGroup(pos, scale, roomObj.ootRoomHeader.defaultCullDistance)
-        DLGroup = mesh.addMeshGroup(cullGroup).DLGroup
-        boundingBox = BoundingBox()
-        ootProcessMesh(
-            mesh,
-            DLGroup,
-            sceneObj,
-            roomObj,
-            transform,
-            not saveTexturesAsPNG,
-            None,
-            boundingBox,
+        roomShape = RoomShapeUtility.create_shape(
+            sceneName, name, roomShapeType, model, transform, sceneObj, roomObj, saveTexturesAsPNG, mainHeaderProps
         )
-        cullGroup.position, cullGroup.cullDepth = boundingBox.getEnclosingSphere()
-        mesh.terminateDLs()
-        mesh.removeUnusedEntries()
-        roomShape = RoomShape.new(roomShapeType, mainHeaderProps, mesh, sceneName, name)
-        return Room(name, roomIndex, mainHeader, altHeader, mesh, roomShape, hasAlternateHeaders)
+        return Room(name, roomIndex, mainHeader, altHeader, roomShape, hasAlternateHeaders)
 
     def getRoomHeaderFromIndex(self, headerIndex: int) -> RoomHeader | None:
         """Returns the current room header based on the header index"""
@@ -147,7 +130,7 @@ class Room:
         cmdListData.source = (
             (f"{listName}[]" + " = {\n")
             + (Utility.getAltHeaderListCmd(self.altHeader.name) if hasAltHeaders else "")
-            + self.roomShape.getCmd()
+            + self.roomShape.get_cmd()
             + curHeader.infos.getCmds()
             + (curHeader.objects.getCmd() if len(curHeader.objects.objectList) > 0 else "")
             + (curHeader.actors.getCmd() if len(curHeader.actors.actorList) > 0 else "")
@@ -212,22 +195,22 @@ class Room:
         """Returns the C data of the room model"""
         roomModel = CData()
 
-        for i, entry in enumerate(self.mesh.meshEntries):
-            if entry.DLGroup.opaque is not None:
-                roomModel.append(entry.DLGroup.opaque.to_c(self.mesh.model.f3d))
+        for i, entry in enumerate(self.roomShape.dl_entries):
+            if entry.opaque is not None:
+                roomModel.append(entry.opaque.to_c(self.roomShape.model.f3d))
 
-            if entry.DLGroup.transparent is not None:
-                roomModel.append(entry.DLGroup.transparent.to_c(self.mesh.model.f3d))
+            if entry.transparent is not None:
+                roomModel.append(entry.transparent.to_c(self.roomShape.model.f3d))
 
             # type ``ROOM_SHAPE_TYPE_IMAGE`` only allows 1 room
-            if i == 0 and self.mesh.roomShape == "ROOM_SHAPE_TYPE_IMAGE":
+            if i == 0 and isinstance(self.roomShape, RoomShapeImageBase):
                 break
 
-        roomModel.append(self.mesh.model.to_c(textureSettings, OOTGfxFormatter(ScrollMethod.Vertex)).all())
+        roomModel.append(self.roomShape.model.to_c(textureSettings, OOTGfxFormatter(ScrollMethod.Vertex)).all())
 
-        if self.roomShape.multiImg is not None:
-            roomModel.append(self.roomShape.multiImg.getC())
-            roomModel.append(self.roomShape.getRoomShapeBgImgDataC(self.mesh, textureSettings))
+        if isinstance(self.roomShape, RoomShapeImageMulti):
+            # roomModel.append(self.roomShape.multiImg.getC()) # Error? double call in getRoomShapeC()?
+            roomModel.append(self.roomShape.to_c_img(textureSettings.includeDir))
 
         return roomModel
 
@@ -236,7 +219,7 @@ class Room:
 
         roomMainData = self.getRoomMainC()
         roomModelData = self.getRoomShapeModelC(textureExportSettings)
-        roomModelInfoData = self.roomShape.getRoomShapeC()
+        roomModelInfoData = self.roomShape.to_c()
 
         return RoomFile(
             self.name,

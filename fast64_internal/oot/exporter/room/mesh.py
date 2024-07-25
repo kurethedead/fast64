@@ -13,6 +13,7 @@ from ...oot_utility import (
 )
 
 from ...oot_level_classes import OOTDLGroup
+from .shape import RoomShape, RoomShapeDListsEntry
 
 
 class BoundingBox:
@@ -60,7 +61,14 @@ class BoundingBox:
 # The copy will have modifiers / scale applied and will be made single user
 # When we duplicated obj hierarchy we stripped all ignore_renders from hierarchy.
 def ootProcessMesh(
-    roomMesh, DLGroup, sceneObj, obj, transformMatrix, convertTextureData, LODHierarchyObject, boundingBox: BoundingBox
+    roomShape: RoomShape,
+    dlEntry: RoomShapeDListsEntry,
+    sceneObj,
+    obj,
+    transformMatrix,
+    convertTextureData,
+    LODHierarchyObject,
+    boundingBox: BoundingBox,
 ):
     relativeTransform = transformMatrix @ sceneObj.matrix_world.inverted() @ obj.matrix_world
     translation, rotation, scale = relativeTransform.decompose()
@@ -76,29 +84,29 @@ def ootProcessMesh(
 
         cullProp = obj.ootCullGroupProperty
         checkUniformScale(scale, obj)
-        DLGroup = roomMesh.addMeshGroup(
+        dlEntry = roomShape.add_dl_entry(
             CullGroup(
                 ootConvertTranslation(translation),
                 scale if cullProp.sizeControlsCull else [cullProp.manualRadius],
                 obj.empty_display_size if cullProp.sizeControlsCull else 1,
             )
-        ).DLGroup
+        )
 
     elif obj.type == "MESH" and not obj.ignore_render:
-        triConverterInfo = TriangleConverterInfo(obj, None, roomMesh.model.f3d, relativeTransform, getInfoDict(obj))
+        triConverterInfo = TriangleConverterInfo(obj, None, roomShape.model.f3d, relativeTransform, getInfoDict(obj))
         fMeshes = saveStaticModel(
             triConverterInfo,
-            roomMesh.model,
+            roomShape.model,
             obj,
             relativeTransform,
-            roomMesh.model.name,
+            roomShape.model.name,
             convertTextureData,
             False,
             "oot",
         )
         if fMeshes is not None:
             for drawLayer, fMesh in fMeshes.items():
-                DLGroup.addDLCall(fMesh.draw, drawLayer)
+                dlEntry.add_dl_call(fMesh.draw, drawLayer)
 
         boundingBox.addMeshObj(obj, relativeTransform)
 
@@ -106,8 +114,8 @@ def ootProcessMesh(
     for childObj in alphabeticalChildren:
         if childObj.type == "EMPTY" and childObj.ootEmptyType == "LOD":
             ootProcessLOD(
-                roomMesh,
-                DLGroup,
+                roomShape,
+                dlEntry,
                 sceneObj,
                 childObj,
                 transformMatrix,
@@ -117,8 +125,8 @@ def ootProcessMesh(
             )
         else:
             ootProcessMesh(
-                roomMesh,
-                DLGroup,
+                roomShape,
+                dlEntry,
                 sceneObj,
                 childObj,
                 transformMatrix,
@@ -129,29 +137,36 @@ def ootProcessMesh(
 
 
 def ootProcessLOD(
-    roomMesh, DLGroup, sceneObj, obj, transformMatrix, convertTextureData, LODHierarchyObject, boundingBox: BoundingBox
+    roomShape: RoomShape,
+    dlEntry: RoomShapeDListsEntry,
+    sceneObj,
+    obj,
+    transformMatrix,
+    convertTextureData,
+    LODHierarchyObject,
+    boundingBox: BoundingBox,
 ):
     relativeTransform = transformMatrix @ sceneObj.matrix_world.inverted() @ obj.matrix_world
     translation, rotation, scale = relativeTransform.decompose()
     ootTranslation = ootConvertTranslation(translation)
 
     LODHierarchyObject = obj
-    name = toAlnum(roomMesh.model.name + "_" + obj.name + "_lod")
-    opaqueLOD = roomMesh.model.addLODGroup(name + "_opaque", ootTranslation, obj.f3d_lod_always_render_farthest)
-    transparentLOD = roomMesh.model.addLODGroup(
+    name = toAlnum(roomShape.model.name + "_" + obj.name + "_lod")
+    opaqueLOD = roomShape.model.addLODGroup(name + "_opaque", ootTranslation, obj.f3d_lod_always_render_farthest)
+    transparentLOD = roomShape.model.addLODGroup(
         name + "_transparent", ootTranslation, obj.f3d_lod_always_render_farthest
     )
 
     index = 0
     for childObj in obj.children:
         # This group will not be converted to C directly, but its display lists will be converted through the FLODGroup.
-        childDLGroup = OOTDLGroup(name + str(index), roomMesh.model.DLFormat)
+        childDLEntry = RoomShapeDListsEntry(f"{name}{str(index)}")
         index += 1
 
         if childObj.type == "EMPTY" and childObj.ootEmptyType == "LOD":
             ootProcessLOD(
-                roomMesh,
-                childDLGroup,
+                roomShape,
+                childDLEntry,
                 sceneObj,
                 childObj,
                 transformMatrix,
@@ -161,8 +176,8 @@ def ootProcessLOD(
             )
         else:
             ootProcessMesh(
-                roomMesh,
-                childDLGroup,
+                roomShape,
+                childDLEntry,
                 sceneObj,
                 childObj,
                 transformMatrix,
@@ -173,15 +188,15 @@ def ootProcessLOD(
 
         # We handle case with no geometry, for the cases where we have "gaps" in the LOD hierarchy.
         # This can happen if a LOD does not use transparency while the levels above and below it does.
-        childDLGroup.createDLs()
-        childDLGroup.terminateDLs()
+        childDLEntry.create_dls()
+        childDLEntry.terminate_dls()
 
         # Add lod AFTER processing hierarchy, so that DLs will be built by then
-        opaqueLOD.add_lod(childDLGroup.opaque, childObj.f3d_lod_z * bpy.context.scene.ootBlenderScale)
-        transparentLOD.add_lod(childDLGroup.transparent, childObj.f3d_lod_z * bpy.context.scene.ootBlenderScale)
+        opaqueLOD.add_lod(childDLEntry.opaque, childObj.f3d_lod_z * bpy.context.scene.ootBlenderScale)
+        transparentLOD.add_lod(childDLEntry.transparent, childObj.f3d_lod_z * bpy.context.scene.ootBlenderScale)
 
     opaqueLOD.create_data()
     transparentLOD.create_data()
 
-    DLGroup.addDLCall(opaqueLOD.draw, "Opaque")
-    DLGroup.addDLCall(transparentLOD.draw, "Transparent")
+    dlEntry.add_dl_call(opaqueLOD.draw, "Opaque")
+    dlEntry.add_dl_call(transparentLOD.draw, "Transparent")
