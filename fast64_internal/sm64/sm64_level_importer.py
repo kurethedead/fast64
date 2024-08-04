@@ -29,7 +29,7 @@ from struct import *
 from shutil import copy
 from pathlib import Path
 from types import ModuleType
-from mathutils import Vector, Euler, Matrix, Quaternion
+from mathutils import Vector, Euler, Matrix, Quaternion, Matrix
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import TextIO
@@ -75,6 +75,9 @@ from .sm64_constants import (
     common_0_geos,
     common_1_geos,
 )
+
+from ..f3d.f3d_parser import F3DContext, parseF3D, applyRotation, createF3DMat, F3DTextureReference, DPSetTile
+from ..f3d.f3d_gbi import get_F3D_GBI
 
 # ------------------------------------------------------------------------
 #    Data
@@ -134,6 +137,27 @@ Layers = {
 #    Classes
 # ------------------------------------------------------------------------
 
+class SM64F3DContext(F3DContext):
+    def __init__(self, f3d, limbList, basePath):
+        self.limbList = limbList
+        self.dlList = []  # in the order they are rendered
+
+        materialContext = createF3DMat(None, preset="sm64_shaded_solid")
+        # materialContext.f3d_mat.rdp_settings.g_mdsft_cycletype = "G_CYC_1CYCLE"
+        F3DContext.__init__(self, f3d, basePath, materialContext)
+
+    def getLimbName(self, index):
+        return self.limbList[index]
+
+    def getBoneName(self, index):
+        return "bone" + format(index, "03") + "_" + self.getLimbName(index)
+
+    def clearGeometry(self):
+        self.dlList = []
+        super().clearGeometry()
+
+    def postMaterialChanged(self):
+        pass
 
 class Area:
     def __init__(
@@ -801,8 +825,10 @@ class SM64_Material(Mat):
 
 
 class SM64_F3D(DL):
-    def __init__(self, scene):
+    def __init__(self, scene, root_path):
         self.scene = scene
+        self.text = ""
+        self.context = SM64F3DContext(get_F3D_GBI(), [], root_path)
         super().__init__(lastmat=SM64_Material())
 
     # Textures only contains the texture data found inside the model.inc.c file and the texture.inc.c file
@@ -837,6 +863,8 @@ class SM64_F3D(DL):
                     },
                 )
             )
+            tex.seek(0)
+            self.text += tex.read() + "\n"
             t.close()
 
     # recursively parse the display list in order to return a bunch of model data
@@ -1862,16 +1890,48 @@ def write_geo_to_bpy(
                 mesh = meshes[name]
                 name = 0
             else:
-                mesh = bpy.data.meshes.new(name)
-                meshes[name] = mesh
-                [verts, tris] = f3d_dat.get_f3d_data_from_model(model_data.model_name)
-                mesh.from_pydata(verts, [], tris)
+                mesh = bpy.data.meshes.new(model_data.model_name + "_mesh")
+                obj = bpy.data.objects.new(model_data.model_name + "_mesh", mesh)
+                bpy.context.collection.objects.link(obj)
+                #obj = model_data.object
+                #model_data.object = obj # TODO: Remove placeholder objects
+                
+                layer_dict = {
+                    "LAYER_FORCE" : "0",
+                    "LAYER_OPAQUE" : "1",
+                    "LAYER_OPAQUE_DECAL" : "2",
+                    "LAYER_OPAQUE_INTER" : "3",
+                    "LAYER_ALPHA" : "4",
+                    "LAYER_TRANSPARENT" : "5",
+                    "LAYER_TRANSPARENT_DECAL" : "6",
+                    "LAYER_TRANSPARENT_INTER" : "7",
+                }
+
+                draw_layer_int = layer_dict[model_data.layer]
+                f3d_dat.context.mat().draw_layer.sm64 = draw_layer_int
+                #transformMatrix = Matrix.Scale(1 / scene.fast64.sm64.blender_to_sm64_scale, 4)
+                transformMatrix = Matrix.Scale(1 , 4)
+
+                parseF3D(f3d_dat.text, model_data.model_name, transformMatrix, model_data.model_name, model_data.model_name, 
+                         "sm64", draw_layer_int, f3d_dat.context, True)
+                
+                #f3d_dat.context.createMesh(obj, removeDoubles, importNormals, callClearMaterial)
+                f3d_dat.context.createMesh(obj, True, True, False) # TODO: delete material context after all write_geo_to_bpy
+
+                #applyRotation([obj], math.radians(-90), "X")
+                
+                #mesh = bpy.data.meshes.new(name)
+                #meshes[name] = mesh
+                #[verts, tris] = f3d_dat.get_f3d_data_from_model(model_data.model_name)
+                #mesh.from_pydata(verts, [], tris)
 
             # swap out placeholder mesh data
+            bpy.context.collection.objects.unlink(obj)
+            bpy.data.objects.remove(obj)
             model_data.object.data = mesh
 
-            if name:
-                apply_mesh_data(f3d_dat, model_data.object, mesh, str(geo.parse_layer(model_data.layer)), root_path, cleanup)
+            #if name:
+            #    apply_mesh_data(f3d_dat, model_data.object, mesh, str(geo.parse_layer(model_data.layer)), root_path, cleanup)
 
     if not geo.children:
         return
@@ -1949,10 +2009,12 @@ def construct_model_data_from_file(aggregate: Path, scene: bpy.types.Scene, root
         root_path,
     )
     # Get all modeldata in the level
-    sm64_f3d_data = SM64_F3D(scene)
+    sm64_f3d_data = SM64_F3D(scene, root_path)
     for model_file in model_files:
         model_file = open(model_file, "r", newline="")
         construct_sm64_f3d_data_from_file(sm64_f3d_data, model_file)
+        model_file.seek(0)
+        sm64_f3d_data.text += model_file.read() + "\n"
     # Update file to have texture.inc.c textures, deal with included textures in the model.inc.c files aswell
     for texture_file in [*texture_files, *model_files]:
         with open(texture_file, "r", newline="") as texture_file:
@@ -1967,6 +2029,8 @@ def construct_model_data_from_file(aggregate: Path, scene: bpy.types.Scene, root
                     },
                 )
             )
+            texture_file.seek(0)
+            sm64_f3d_data.text += texture_file.read() + "\n"
     return sm64_f3d_data
 
 
